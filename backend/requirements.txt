@@ -1,0 +1,63 @@
+# ============================================================
+# Django core
+# ============================================================
+Django==6.0.5
+django-environ==0.13.0
+django-cors-headers==4.9.0
+django-extensions==4.1
+
+# ============================================================
+# REST API & Authentication
+# ============================================================
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+
+# ============================================================
+# Database (PostgreSQL + pgvector). psycopg 3.x (vs the older
+# psycopg2-binary) has wheels for Python 3.14 and is the path
+# Django 6 recommends.
+# ============================================================
+psycopg[binary]>=3.2.10
+pgvector==0.4.2
+
+# ============================================================
+# Cache (used by DRF throttling and as a general key-value store)
+# ============================================================
+redis==7.1.0
+
+# ============================================================
+# Production server
+# ============================================================
+gunicorn==25.1.0
+whitenoise==6.11.0
+
+# ============================================================
+# Agent / LLM
+# ============================================================
+openai==2.36.0                       # Used as OpenAI-compatible client against Ollama
+langgraph==1.1.10                    # ReAct state machine
+sentence-transformers==5.4.1         # Local embeddings (default: BAAI/bge-small-en-v1.5)
+
+# ============================================================
+# RAG: document parsing & chunking
+# ============================================================
+pypdf==5.4.0
+python-docx==1.1.2
+beautifulsoup4==4.13.4
+langchain-text-splitters==0.3.11
+
+# ============================================================
+# Evals (Ragas 0.4 has a redesigned API vs 0.2) + LangChain
+# wrappers required by Ragas for LLM/embedding judges + LangSmith
+# tracing. These four packages must move in lockstep (langchain 1.x
+# pulls a tightly-versioned langchain-core / langsmith pair), so we
+# leave them unpinned and let pip resolve a coherent set against
+# langgraph 1.1.x.
+# ============================================================
+ragas==0.4.3
+datasets>=2.18
+langchain-openai
+langchain-huggingface
+langsmith
+python-dotenv
+requests
