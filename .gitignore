@@ -36,3 +36,6 @@ eval/results/
 
 # Source PDFs (download list lives in papers/README.md)
 papers/*.pdf
+
+# Django migrations (regenerated locally)
+backend/agent/migrations/0*.py
