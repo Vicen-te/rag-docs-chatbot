@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -191,3 +192,16 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
+
+
+# Observability
+# ------------------------------------------------------------------
+# When LANGSMITH_API_KEY is set, LangChain auto-traces every LLM call
+# under the configured project name. With no key set the agent runs
+# without any external telemetry.
+LANGSMITH_API_KEY = env("LANGSMITH_API_KEY", default="")
+LANGSMITH_PROJECT = env("LANGSMITH_PROJECT", default="rag-docs-chatbot")
+if LANGSMITH_API_KEY:
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGCHAIN_API_KEY", LANGSMITH_API_KEY)
+    os.environ.setdefault("LANGCHAIN_PROJECT", LANGSMITH_PROJECT)
