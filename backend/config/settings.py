@@ -10,7 +10,9 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
+
 import environ
 
 
@@ -44,7 +46,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "agent"
+    "rest_framework",
+    "agent",
 ]
 
 MIDDLEWARE = [
@@ -147,3 +150,44 @@ KB_RERANKER_MODEL = env(
     "KB_RERANKER_MODEL",
     default="cross-encoder/ms-marco-MiniLM-L-6-v2",
 )
+
+
+# Agent / LLM
+# ------------------------------------------------------------------
+# Ollama is reached via its OpenAI-compatible endpoint. API key is
+# required by the openai client but not enforced by Ollama itself.
+OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="http://localhost:11434/v1")
+OLLAMA_API_KEY = env("OLLAMA_API_KEY", default="ollama")
+OLLAMA_MODEL = env("OLLAMA_MODEL", default="llama3.2:3b")
+
+# Number of KB chunks fed into the synthesis prompt.
+AGENT_TOP_K = env.int("AGENT_TOP_K", default=5)
+
+# Verifier loop: how many synthesis retries before giving up.
+AGENT_MAX_VERIFY_RETRIES = env.int("AGENT_MAX_VERIFY_RETRIES", default=2)
+
+
+# REST framework
+# ------------------------------------------------------------------
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "60/min",
+        "anon": "10/min",
+    },
+    "EXCEPTION_HANDLER": "agent.exception_handler.custom_exception_handler",
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
