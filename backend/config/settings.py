@@ -120,3 +120,30 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+
+
+# Retrieval / RAG tunables
+# ------------------------------------------------------------------
+# Embedding model and its output dimensionality. Changing the model
+# means re-ingesting the corpus (different vector space) and altering
+# the KBChunk.embedding column dimension to match.
+EMBEDDING_MODEL = env("EMBEDDING_MODEL", default="BAAI/bge-small-en-v1.5")
+EMBEDDING_DIM = env.int("EMBEDDING_DIM", default=384)
+
+# Parent / child chunk window sizes (characters) and the overlap
+# both layers use at paragraph boundaries.
+KB_PARENT_CHUNK_SIZE = env.int("KB_PARENT_CHUNK_SIZE", default=2048)
+KB_CHILD_CHUNK_SIZE = env.int("KB_CHILD_CHUNK_SIZE", default=512)
+KB_CHUNK_OVERLAP = env.int("KB_CHUNK_OVERLAP", default=64)
+
+# Reciprocal Rank Fusion: k smooths the score at the head of the
+# ranking; weights pick how much to trust semantic vs lexical signal.
+KB_RRF_K = env.int("KB_RRF_K", default=60)
+KB_SEMANTIC_WEIGHT = env.float("KB_SEMANTIC_WEIGHT", default=0.7)
+KB_LEXICAL_WEIGHT = env.float("KB_LEXICAL_WEIGHT", default=0.3)
+
+# Cross-encoder used to rerank an initial candidate list.
+KB_RERANKER_MODEL = env(
+    "KB_RERANKER_MODEL",
+    default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+)

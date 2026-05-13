@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from pgvector.django import VectorField
 
 
 class Conversation(models.Model):
@@ -218,7 +219,7 @@ class KBChunk(models.Model):
     chunk_index = models.PositiveIntegerField()
     content = models.TextField()
     token_count = models.PositiveIntegerField(null=True, blank=True)
-    embedding = models.JSONField(null=True, blank=True)
+    embedding = VectorField(dimensions=settings.EMBEDDING_DIM, null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

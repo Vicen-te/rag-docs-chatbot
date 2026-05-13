@@ -67,12 +67,18 @@ docker run --name rag-pg `
   -p 5432:5432 -d postgres:18
 ```
 
-### 4. Apply migrations and create a superuser
+### 4. Install Postgres extensions and migrate
 
 ```powershell
+python manage.py init_extensions
 python manage.py migrate
 python manage.py createsuperuser
 ```
+
+`init_extensions` installs `vector` (for embeddings) and `pg_trgm`
+(for lexical search) on the database referenced by `DATABASE_URL`.
+It must run before `migrate`, because the KB schema declares a
+`vector(384)` column.
 
 ### 5. Run the dev server
 
@@ -95,6 +101,9 @@ rag-docs-chatbot/
 |   |-- requirements.txt
 |   |-- config/               # Django project (settings, urls, wsgi, asgi)
 |   `-- agent/                # Single app: models, admin, views, urls
+|       |-- kb/               # Ingestion, search (semantic + lexical + RRF), reranker
+|       |-- memory/           # Embeddings helper
+|       `-- management/       # Custom manage.py commands
 |-- eval/
 `-- papers/                   # PDFs gitignored
 ```
