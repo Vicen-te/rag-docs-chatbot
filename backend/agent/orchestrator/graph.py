@@ -80,14 +80,19 @@ def _synthesise(state: AgentState, config) -> AgentState:
             prompts.SYNTHESIS,
         ) if s
     )
+    user_content = (
+        f"Question: {state['user_message']}\n\nContext:\n{context_block}"
+    )
+    verify_reason = state.get("verify_reason", "")
+    if state.get("verify_iterations", 0) > 0 and verify_reason:
+        user_content += (
+            f"\n\nA previous attempt was rejected for: {verify_reason}\n"
+            "Produce a new answer that addresses this issue. "
+            "Stay grounded in the context above; do not invent facts."
+        )
     messages = [
         {"role": "system", "content": system_prompt},
-        {
-            "role": "user",
-            "content": (
-                f"Question: {state['user_message']}\n\nContext:\n{context_block}"
-            ),
-        },
+        {"role": "user", "content": user_content},
     ]
     resp = chat_completion(messages=messages, temperature=0.2)
     state["candidate"] = resp["choices"][0]["message"]["content"]
