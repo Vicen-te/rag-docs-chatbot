@@ -10,6 +10,10 @@ from agent.kb.ingestion import ingest_document
 
 SUPPORTED_SUFFIXES = {".pdf", ".docx", ".html", ".htm", ".txt", ".md"}
 
+# A README inside a corpus directory documents the corpus; it is not
+# part of it. Skipping it by stem keeps that catalogue out of the KB.
+EXCLUDED_STEMS = {"readme"}
+
 
 class Command(BaseCommand):
     help = "Ingest every supported file under a directory."
@@ -30,7 +34,9 @@ class Command(BaseCommand):
 
         files = sorted(
             p for p in root.rglob("*")
-            if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
+            if p.is_file()
+            and p.suffix.lower() in SUPPORTED_SUFFIXES
+            and p.stem.lower() not in EXCLUDED_STEMS
         )
         if not files:
             self.stderr.write(

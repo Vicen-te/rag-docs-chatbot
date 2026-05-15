@@ -155,14 +155,30 @@ KB_RERANKER_MODEL = env(
 
 # Agent / LLM
 # ------------------------------------------------------------------
-# Ollama is reached via its OpenAI-compatible endpoint. API key is
-# required by the openai client but not enforced by Ollama itself.
+# LLM_PROVIDER selects the transport in agent/orchestrator/llm_client.py:
+# "ollama" hits Ollama's native /api/chat (honours options.num_ctx);
+# "openai" uses the OpenAI SDK against OLLAMA_BASE_URL (kept for any
+# OpenAI-compatible endpoint, where API key is enforced).
+LLM_PROVIDER = env("LLM_PROVIDER", default="ollama")
 OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="http://localhost:11434/v1")
 OLLAMA_API_KEY = env("OLLAMA_API_KEY", default="ollama")
-OLLAMA_MODEL = env("OLLAMA_MODEL", default="llama3.2:3b")
+OLLAMA_MODEL = env("OLLAMA_MODEL", default="qwen3.5:9b")
+
+# Context window forwarded to Ollama via the `options` extra. Ollama
+# defaults to 4096 regardless of what the model card claims; bump this
+# when the synthesis prompt + retrieved chunks risk truncation.
+OLLAMA_NUM_CTX = env.int("OLLAMA_NUM_CTX", default=4096)
 
 # Number of KB chunks fed into the synthesis prompt.
-AGENT_TOP_K = env.int("AGENT_TOP_K", default=5)
+AGENT_TOP_K = env.int("AGENT_TOP_K", default=8)
+
+# Cross-encoder reranking. When enabled, hybrid_search returns
+# AGENT_TOP_K * AGENT_RERANK_CANDIDATES_MULTIPLIER candidates which
+# are then rescored down to AGENT_TOP_K by the reranker.
+AGENT_USE_RERANKER = env.bool("AGENT_USE_RERANKER", default=False)
+AGENT_RERANK_CANDIDATES_MULTIPLIER = env.int(
+    "AGENT_RERANK_CANDIDATES_MULTIPLIER", default=3
+)
 
 # Verifier loop: how many synthesis retries before giving up.
 AGENT_MAX_VERIFY_RETRIES = env.int("AGENT_MAX_VERIFY_RETRIES", default=2)
@@ -205,3 +221,14 @@ if LANGSMITH_API_KEY:
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_API_KEY", LANGSMITH_API_KEY)
     os.environ.setdefault("LANGCHAIN_PROJECT", LANGSMITH_PROJECT)
+
+# Ragas evaluation
+# ------------------------------------------------------------------
+# Judge LLM used by `ragas_run`. "ollama" reuses the local model
+# (free, slower, same model that generated the answer -- biased);
+# "openai" routes to the OpenAI API (requires OPENAI_API_KEY, faster
+# and more impartial). When RAGAS_JUDGE_MODEL is empty the default is
+# OLLAMA_MODEL for ollama or gpt-4o-mini for openai.
+RAGAS_JUDGE_PROVIDER = env("RAGAS_JUDGE_PROVIDER", default="ollama")
+RAGAS_JUDGE_MODEL = env("RAGAS_JUDGE_MODEL", default="")
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")

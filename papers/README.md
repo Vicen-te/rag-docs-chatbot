@@ -25,4 +25,4 @@ python manage.py ingest_papers ../papers/
 | 13 | `ragas.pdf`        | Ragas: Automated Evaluation of RAG (Es et al., 2023)                        | [2309.15217](https://arxiv.org/pdf/2309.15217) |
 
 The PDF filenames are referenced verbatim by `eval/dataset.jsonl` (the
-`expected_source` field), so do not rename them.
+`expected_sources` field), so do not rename them.
