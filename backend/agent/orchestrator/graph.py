@@ -1,7 +1,14 @@
-"""ReAct state graph.
+"""Corrective-RAG state graph.
 
-intake -> classify -> (conversational | retrieve -> synthesise -> verify) -> END
-The verify node can loop back to synthesise up to AGENT_MAX_VERIFY_RETRIES.
+Deterministic LangGraph pipeline with an intent router and an
+LLM-as-judge self-critique loop:
+
+    intake -> classify -> (conversational | retrieve -> synthesise -> verify) -> END
+
+The verify node loops back to synthesise up to AGENT_MAX_VERIFY_RETRIES
+when the candidate answer fails the grounded-answer check. Retrieval
+is not LLM-driven (no ReAct-style tool selection) -- the graph
+invokes hybrid_search unconditionally on the knowledge branch.
 """
 from __future__ import annotations
 
@@ -11,6 +18,7 @@ from typing import TypedDict
 from django.conf import settings
 from langgraph.graph import END, StateGraph
 
+from agent.kb.reranker import rerank
 from agent.kb.search import hybrid_search
 from agent.memory.service import format_memory_for_prompt
 from agent.orchestrator import prompts
@@ -31,6 +39,7 @@ class AgentState(TypedDict, total=False):
     final: str
     verify_iterations: int
     verify_reason: str
+    retrieval_mode: str
 
 
 def _intake(state: AgentState, config) -> AgentState:
@@ -60,7 +69,18 @@ def _conversational(state: AgentState, config) -> AgentState:
 
 
 def _retrieve(state: AgentState, config) -> AgentState:
-    hits = hybrid_search(state["user_message"], top_k=settings.AGENT_TOP_K)
+    mode = state.get("retrieval_mode", "hybrid")
+    if mode == "none":
+        state["context"] = []
+        return state
+    if settings.AGENT_USE_RERANKER:
+        pool = settings.AGENT_TOP_K * settings.AGENT_RERANK_CANDIDATES_MULTIPLIER
+        hits = hybrid_search(state["user_message"], mode=mode, top_k=pool)
+        hits = rerank(state["user_message"], hits, top_k=settings.AGENT_TOP_K)
+    else:
+        hits = hybrid_search(
+            state["user_message"], mode=mode, top_k=settings.AGENT_TOP_K,
+        )
     state["context"] = [
         {"document_id": h.document_id, "content": h.content, "score": h.score}
         for h in hits
@@ -163,10 +183,50 @@ def build_graph():
 GRAPH = build_graph()
 
 
-def run_agent(user, conversation_id, user_message: str) -> AgentState:
+def run_agent(
+    user,
+    conversation_id,
+    user_message: str,
+    *,
+    retrieval_mode: str = "hybrid",
+) -> AgentState:
     initial: AgentState = {
         "user_id": str(user.id),
         "conversation_id": str(conversation_id),
         "user_message": user_message,
+        "retrieval_mode": retrieval_mode,
     }
     return GRAPH.invoke(initial, config={"configurable": {"user": user}})
+
+
+def stream_agent(
+    user,
+    conversation_id,
+    user_message: str,
+    *,
+    retrieval_mode: str = "hybrid",
+):
+    """Run the graph and yield one event per node transition.
+
+    Each step event is `{"type": "step", "node": <name>, "diff": <state_diff>,
+    "state": <accumulated_state>}`. After the graph terminates a single
+    `{"type": "final", "state": <accumulated_state>}` event is emitted so
+    callers can pick up the answer without re-invoking the graph.
+    """
+    initial: AgentState = {
+        "user_id": str(user.id),
+        "conversation_id": str(conversation_id),
+        "user_message": user_message,
+        "retrieval_mode": retrieval_mode,
+    }
+    state: AgentState = {**initial}
+    for chunk in GRAPH.stream(
+        initial,
+        config={"configurable": {"user": user}},
+        stream_mode="updates",
+    ):
+        for node, diff in chunk.items():
+            if diff:
+                state.update(diff)
+            yield {"type": "step", "node": node, "diff": diff or {}, "state": {**state}}
+    yield {"type": "final", "state": state}
