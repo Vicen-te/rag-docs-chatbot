@@ -1,0 +1,42 @@
+# Python -- use **/ so they match at any depth, not just the root.
+**/__pycache__/
+**/*.py[cod]
+**/*.so
+**/*.egg-info/
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+**/*.swp
+
+# Data / artifacts
+papers/*.pdf
+eval/results/
+**/db.sqlite3
+**/*.log
+**/*.pkl
+**/*.joblib
+
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
