@@ -18,6 +18,13 @@ PLANNING = (
     "object with a 'steps' array describing the tools to call in order."
 )
 
+DECOMPOSE = (
+    "Break the user's question into the minimal set of self-contained "
+    "sub-questions, each answerable by retrieving one topic. If it already "
+    "asks about a single thing, return it unchanged as the only item. "
+    "Reply with ONLY a JSON array of strings, at most 3."
+)
+
 SYNTHESIS = (
     "Synthesise an answer to the user's question using ONLY the provided "
     "context. Cite source documents inline as [doc:<id>] right after the "

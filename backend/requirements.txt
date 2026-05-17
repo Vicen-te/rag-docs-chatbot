@@ -17,7 +17,7 @@ djangorestframework-simplejwt==5.5.1
 # psycopg2-binary) has wheels for Python 3.14 and is the path
 # Django 6 recommends.
 # ============================================================
-psycopg[binary]>=3.2.10
+psycopg[binary]==3.3.4
 pgvector==0.4.2
 
 # ============================================================
@@ -49,15 +49,18 @@ langchain-text-splitters==0.3.11
 # ============================================================
 # Evals (Ragas 0.4 has a redesigned API vs 0.2) + LangChain
 # wrappers required by Ragas for LLM/embedding judges + LangSmith
-# tracing. These four packages must move in lockstep (langchain 1.x
-# pulls a tightly-versioned langchain-core / langsmith pair), so we
-# leave them unpinned and let pip resolve a coherent set against
-# langgraph 1.1.x.
+# tracing. langchain 1.x pulls a tightly-versioned langchain-core /
+# langsmith pair, so the whole group is pinned to one resolved,
+# known-good set against ragas 0.4.3 / langgraph 1.1.x rather than
+# left to float (exact reproducibility).
 # ============================================================
 ragas==0.4.3
-datasets>=2.18
-langchain-openai
-langchain-huggingface
-langsmith
-python-dotenv
-requests
+datasets==4.8.5
+langchain-core==1.4.0
+langchain-openai==1.2.1
+langchain-anthropic==1.4.3
+langchain-huggingface==1.2.2
+langsmith==0.8.3
+python-dotenv==1.2.2
+requests==2.34.0
+truststore==0.10.4

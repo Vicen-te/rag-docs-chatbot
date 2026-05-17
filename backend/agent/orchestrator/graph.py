@@ -13,6 +13,7 @@ invokes hybrid_search unconditionally on the knowledge branch.
 from __future__ import annotations
 
 import json
+from itertools import zip_longest
 from typing import TypedDict
 
 from django.conf import settings
@@ -22,6 +23,7 @@ from agent.kb.reranker import rerank
 from agent.kb.search import hybrid_search
 from agent.memory.service import format_memory_for_prompt
 from agent.orchestrator import prompts
+from agent.orchestrator.decompose import decompose_query
 from agent.orchestrator.guardrails import sanitize
 from agent.orchestrator.llm_client import chat_completion
 from agent.orchestrator.router import classify_task_type, try_fast_route
@@ -68,19 +70,41 @@ def _conversational(state: AgentState, config) -> AgentState:
     return state
 
 
+def _merge_searches(subqueries: list[str], mode: str, per_k: int):
+    """Search each sub-query, then round-robin by rank (rank-1 of every
+    sub-query, then rank-2, ...) deduped by chunk. One sub-query reduces
+    to a plain hybrid_search, so single-hop behaviour is unchanged."""
+    rankings = [
+        hybrid_search(s, mode=mode, top_k=per_k) for s in subqueries
+    ]
+    seen: set[str] = set()
+    merged = []
+    for tier in zip_longest(*rankings):
+        for hit in tier:
+            if hit is None or hit.chunk_id in seen:
+                continue
+            seen.add(hit.chunk_id)
+            merged.append(hit)
+    return merged
+
+
 def _retrieve(state: AgentState, config) -> AgentState:
     mode = state.get("retrieval_mode", "hybrid")
     if mode == "none":
         state["context"] = []
         return state
-    if settings.AGENT_USE_RERANKER:
-        pool = settings.AGENT_TOP_K * settings.AGENT_RERANK_CANDIDATES_MULTIPLIER
-        hits = hybrid_search(state["user_message"], mode=mode, top_k=pool)
-        hits = rerank(state["user_message"], hits, top_k=settings.AGENT_TOP_K)
+    query = state["user_message"]
+    if settings.AGENT_QUERY_DECOMPOSITION:
+        subqueries = decompose_query(query)
     else:
-        hits = hybrid_search(
-            state["user_message"], mode=mode, top_k=settings.AGENT_TOP_K,
-        )
+        subqueries = [query]
+    top_k = settings.AGENT_TOP_K
+    if settings.AGENT_USE_RERANKER:
+        per_k = top_k * settings.AGENT_RERANK_CANDIDATES_MULTIPLIER
+        candidates = _merge_searches(subqueries, mode, per_k)
+        hits = rerank(query, candidates, top_k=top_k)
+    else:
+        hits = _merge_searches(subqueries, mode, top_k)[:top_k]
     state["context"] = [
         {"document_id": h.document_id, "content": h.content, "score": h.score}
         for h in hits

@@ -11,10 +11,33 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import warnings
 from datetime import timedelta
 from pathlib import Path
 
 import environ
+import truststore
+
+# Use the OS certificate store for TLS. Machines behind an SSL-
+# inspecting proxy/AV present a CA that certifi does not trust, which
+# breaks outbound HTTPS (HuggingFace, Anthropic). The OS store already
+# trusts that CA (browsers work), so route Python's TLS through it.
+truststore.inject_into_ssl()
+
+# langchain_core, when first imported, force-"surfaces" its own
+# (pending) deprecation warnings by prepending a "default" filter for
+# them. langgraph then emits one such warning (an allowed_objects
+# default we never set ourselves). Importing langchain_core here, then
+# overriding with our own ignore filter, keeps that third-party noise
+# out of every entry point (settings load before any langgraph import).
+import langchain_core  # noqa: F401  (imported for its filter side effect)
+from langchain_core._api.deprecation import (
+    LangChainDeprecationWarning,
+    LangChainPendingDeprecationWarning,
+)
+
+warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
+warnings.filterwarnings("ignore", category=LangChainDeprecationWarning)
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -169,8 +192,11 @@ OLLAMA_MODEL = env("OLLAMA_MODEL", default="qwen3.5:9b")
 # when the synthesis prompt + retrieved chunks risk truncation.
 OLLAMA_NUM_CTX = env.int("OLLAMA_NUM_CTX", default=4096)
 
-# Number of KB chunks fed into the synthesis prompt.
-AGENT_TOP_K = env.int("AGENT_TOP_K", default=8)
+# Number of KB chunks fed into the synthesis prompt. A retrieval-recall
+# sweep over the eval set put the knee at 12 (multi_hop recall 67->83%,
+# overall 88->94%) with no answer-quality regression; larger k only
+# adds prompt noise for marginal recall.
+AGENT_TOP_K = env.int("AGENT_TOP_K", default=12)
 
 # Cross-encoder reranking. When enabled, hybrid_search returns
 # AGENT_TOP_K * AGENT_RERANK_CANDIDATES_MULTIPLIER candidates which
@@ -182,6 +208,15 @@ AGENT_RERANK_CANDIDATES_MULTIPLIER = env.int(
 
 # Verifier loop: how many synthesis retries before giving up.
 AGENT_MAX_VERIFY_RETRIES = env.int("AGENT_MAX_VERIFY_RETRIES", default=2)
+
+# Split a multi-part question into focused sub-queries, retrieved
+# separately and merged round-robin into the same top_k budget.
+# Off by default: measured net-negative on this corpus (multi_hop
+# recall 83 -> 75%). It fixes questions where one blended query
+# buries a topic, but for questions where the single query already
+# retrieves both papers, halving the per-query budget drops needed
+# chunks. Kept opt-in for corpora with genuinely independent hops.
+AGENT_QUERY_DECOMPOSITION = env.bool("AGENT_QUERY_DECOMPOSITION", default=False)
 
 
 # REST framework
@@ -224,11 +259,16 @@ if LANGSMITH_API_KEY:
 
 # Ragas evaluation
 # ------------------------------------------------------------------
-# Judge LLM used by `ragas_run`. "ollama" reuses the local model
-# (free, slower, same model that generated the answer -- biased);
-# "openai" routes to the OpenAI API (requires OPENAI_API_KEY, faster
-# and more impartial). When RAGAS_JUDGE_MODEL is empty the default is
-# OLLAMA_MODEL for ollama or gpt-4o-mini for openai.
+# Judge LLM used by `ragas_run`:
+#   "ollama"    -- local model, free but a weak structured-output
+#                  judge (frequent parser failures -> NaN metrics).
+#   "openai"    -- OpenAI API (OPENAI_API_KEY), fast and reliable.
+#   "anthropic" -- Anthropic API (ANTHROPIC_API_KEY), fast and
+#                  reliable; embeddings stay local (no Anthropic
+#                  embedding API).
+# When RAGAS_JUDGE_MODEL is empty the default is OLLAMA_MODEL for
+# ollama, gpt-4o-mini for openai, claude-haiku-4-5 for anthropic.
 RAGAS_JUDGE_PROVIDER = env("RAGAS_JUDGE_PROVIDER", default="ollama")
 RAGAS_JUDGE_MODEL = env("RAGAS_JUDGE_MODEL", default="")
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")

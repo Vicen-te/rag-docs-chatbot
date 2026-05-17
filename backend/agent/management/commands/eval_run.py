@@ -60,10 +60,17 @@ def _load_document_map() -> dict[str, str]:
 
 
 def _check_must_include(answer: str, tokens: list[str]) -> bool:
+    # Each token must appear as a substring (case-insensitive). A token
+    # may list "|"-separated alternatives, any of which satisfies it --
+    # used for accepted synonyms or spelling variants (e.g.
+    # "quantis|quantiz") so the check tests the concept, not one literal.
     if not tokens:
         return True
     lo = answer.lower()
-    return all(tok.lower() in lo for tok in tokens)
+    return all(
+        any(alt.strip().lower() in lo for alt in tok.split("|"))
+        for tok in tokens
+    )
 
 
 def _ensure_eval_user(username: str):
