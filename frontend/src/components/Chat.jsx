@@ -14,6 +14,7 @@ export default function Chat({ token, onLogout }) {
     retryAssistantAt,
     streaming,
     conversationId,
+    stop,
     reset,
     loadFromConversation,
   } = useChat(token);
@@ -78,7 +79,7 @@ export default function Chat({ token, onLogout }) {
           onEdit={editAt}
           onRetryAt={retryAssistantAt}
         />
-        <MessageInput onSend={send} streaming={streaming} />
+        <MessageInput onSend={send} onStop={stop} streaming={streaming} />
       </div>
     </div>
   );

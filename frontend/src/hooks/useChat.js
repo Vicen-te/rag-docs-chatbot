@@ -27,6 +27,14 @@ export function useChat(token) {
     }
   }, []);
 
+  // User-initiated stop of the current stream. Aborts the fetch
+  // (cancelInFlight marks it cancelled so no error is shown) and
+  // drops the streaming flag; the partial answer stays on screen.
+  const stop = useCallback(() => {
+    cancelInFlight();
+    setStreaming(false);
+  }, [cancelInFlight]);
+
   const reset = useCallback(() => {
     cancelInFlight();
     setMessages([]);
@@ -268,6 +276,7 @@ export function useChat(token) {
     send,
     editAt,
     retryAssistantAt,
+    stop,
     reset,
     loadFromConversation,
   };

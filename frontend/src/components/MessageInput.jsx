@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function MessageInput({ onSend, streaming }) {
+export default function MessageInput({ onSend, onStop, streaming }) {
   const [value, setValue] = useState('');
   const inputRef = useRef(null);
 
@@ -27,9 +27,15 @@ export default function MessageInput({ onSend, streaming }) {
         onChange={(e) => setValue(e.target.value)}
         autoFocus
       />
-      <button type="submit" disabled={streaming || !value.trim()}>
-        Send
-      </button>
+      {streaming ? (
+        <button type="button" className="stop-btn" onClick={onStop}>
+          Stop
+        </button>
+      ) : (
+        <button type="submit" disabled={!value.trim()}>
+          Send
+        </button>
+      )}
     </form>
   );
 }

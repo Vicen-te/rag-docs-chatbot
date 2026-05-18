@@ -1,3 +1,7 @@
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+
 import { formatMessageTime } from '../lib/time.js';
 import MessageActions from './MessageActions.jsx';
 
@@ -58,7 +62,14 @@ export default function AssistantMessage({
         )
       )}
       {(message.content || placeholder) && (
-        <div className="content">{message.content || placeholder}</div>
+        <div className="content markdown">
+          <ReactMarkdown
+            remarkPlugins={[remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+          >
+            {message.content || placeholder}
+          </ReactMarkdown>
+        </div>
       )}
       {showActions && (
         <MessageActions

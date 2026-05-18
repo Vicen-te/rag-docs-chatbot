@@ -368,6 +368,34 @@ body {
   max-width: 90%;
 }
 
+/* Markdown + KaTeX answer body (assistant only). Overrides the
+   pre-wrap whitespace so block elements do not double-space. */
+.msg .content.markdown { white-space: normal; }
+.msg .content.markdown > :first-child { margin-top: 0; }
+.msg .content.markdown > :last-child { margin-bottom: 0; }
+.msg .content.markdown p { margin: 0 0 0.6em; }
+.msg .content.markdown ul,
+.msg .content.markdown ol { margin: 0 0 0.6em; padding-left: 1.4em; }
+.msg .content.markdown li { margin: 0.15em 0; }
+.msg .content.markdown code {
+  background: #11141a;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.msg .content.markdown pre {
+  background: #11141a;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.msg .content.markdown pre code { background: none; padding: 0; }
+.msg .content.markdown .katex-display {
+  margin: 0.4em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 /* Edit mode */
 
 .msg.editing {
@@ -501,3 +529,6 @@ body {
 }
 
 .chat form button:hover:not(:disabled) { background: #1d4ed8; }
+
+.chat form button.stop-btn { background: #ef4444; }
+.chat form button.stop-btn:hover:not(:disabled) { background: #dc2626; }
