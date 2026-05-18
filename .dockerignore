@@ -36,6 +36,10 @@ eval/results/
 **/.DS_Store
 **/Thumbs.db
 
+# Frontend (built in its own image; never part of the backend context)
+frontend/node_modules/
+frontend/dist/
+
 # Docker
 Dockerfile
 docker-compose*.yml

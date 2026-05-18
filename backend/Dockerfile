@@ -16,6 +16,8 @@ RUN pip install -r requirements.txt
 
 COPY backend/ /app/
 
+RUN chmod +x /app/entrypoint.sh
+
 EXPOSE 8000
 
-CMD ["gunicorn", "config.wsgi", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+ENTRYPOINT ["/app/entrypoint.sh"]

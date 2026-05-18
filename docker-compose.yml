@@ -5,10 +5,13 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: rag
-    ports:
-      - "5433:5432"
+    # No host port: the backend reaches this over the compose network
+    # as db:5432, and not publishing it lets the stack coexist with a
+    # native dev Postgres already bound to a host port.
     volumes:
-      - db_data:/var/lib/postgresql/data
+      # PG18 images store data in a major-version subdir, so the mount
+      # is /var/lib/postgresql (not .../data as on PG <= 17).
+      - db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d rag"]
       interval: 10s
@@ -17,8 +20,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    # No host port: only the backend uses it, over the compose network.
     volumes:
       - redis_data:/data
     healthcheck:
@@ -29,8 +31,18 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+    # Single Ollama service: serve in the background, pull the model on
+    # first boot (a fast no-op afterwards since it persists in
+    # ollama_data), then keep serving. The healthcheck reports healthy
+    # only once the model is present, so the backend waits for a ready
+    # model. No host port: the backend reaches this over the compose
+    # network as ollama:11434, and not publishing it lets the stack
+    # coexist with a native Ollama already bound to 11434.
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      # Keep the model resident in VRAM so a chat after an idle gap is
+      # not a cold reload (which exceeded the gunicorn worker timeout).
+      OLLAMA_KEEP_ALIVE: "-1"
     volumes:
       - ollama_data:/root/.ollama
     deploy:
@@ -40,11 +52,15 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'ollama serve & until ollama list >/dev/null 2>&1; do sleep 1; done; ollama list | grep -q "$$OLLAMA_MODEL" || ollama pull "$$OLLAMA_MODEL"; wait'
     healthcheck:
-      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "ollama list | grep -q \"$$OLLAMA_MODEL\" || exit 1"]
       interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 20
       start_period: 30s
 
   backend:
@@ -58,16 +74,22 @@ services:
       ALLOWED_HOSTS: localhost,127.0.0.1,backend
       DATABASE_URL: postgres://postgres:postgres@db:5432/rag
       OLLAMA_BASE_URL: http://ollama:11434/v1
+      REDIS_URL: redis://redis:6379/0
+      HF_HOME: /hf_cache
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       ollama:
-        condition: service_started
-    ports:
-      - "8000:8000"
+        condition: service_healthy
+    # No host port: the SPA reaches the backend through the nginx
+    # frontend (port 80), which proxies /api, /admin and /static over
+    # the compose network. Only port 80 is published by this stack.
     volumes:
       - ./papers:/app/papers:ro
       - ./eval:/eval
+      - hf_cache:/hf_cache
     deploy:
       resources:
         reservations:
@@ -75,11 +97,6 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    command: >
-      sh -c "python manage.py init_extensions
-      && python manage.py makemigrations agent --noinput
-      && python manage.py migrate --noinput
-      && gunicorn config.wsgi --bind 0.0.0.0:8000 --workers 2 --timeout 120"
     healthcheck:
       test:
         - CMD-SHELL
@@ -91,7 +108,17 @@ services:
       retries: 3
       start_period: 60s
 
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+
 volumes:
   db_data:
   redis_data:
   ollama_data:
+  hf_cache:

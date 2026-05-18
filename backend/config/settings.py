@@ -76,6 +76,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -147,6 +148,24 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# Cache (DRF throttle counters, shared across gunicorn workers).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("REDIS_URL", default="redis://localhost:6379/0"),
+    },
+}
 
 
 # Retrieval / RAG tunables
@@ -191,6 +210,12 @@ OLLAMA_MODEL = env("OLLAMA_MODEL", default="qwen3.5:9b")
 # defaults to 4096 regardless of what the model card claims; bump this
 # when the synthesis prompt + retrieved chunks risk truncation.
 OLLAMA_NUM_CTX = env.int("OLLAMA_NUM_CTX", default=4096)
+
+# Hard cap on generated tokens per LLM call. Without it a model can
+# ramble or repeat up to num_ctx on a hard prompt (a multi-hop
+# synthesis ran away for minutes); 1024 is ample for a grounded
+# answer and bounds worst-case latency.
+OLLAMA_NUM_PREDICT = env.int("OLLAMA_NUM_PREDICT", default=1024)
 
 # Number of KB chunks fed into the synthesis prompt. A retrieval-recall
 # sweep over the eval set put the knee at 12 (multi_hop recall 67->83%,
@@ -247,15 +272,23 @@ SIMPLE_JWT = {
 
 # Observability
 # ------------------------------------------------------------------
-# When LANGSMITH_API_KEY is set, LangChain auto-traces every LLM call
-# under the configured project name. With no key set the agent runs
-# without any external telemetry.
+# When LANGSMITH_API_KEY is set, the LangGraph pipeline is traced node
+# by node and the @traceable-wrapped LLM client (chat_completion /
+# chat_completion_stream) and the retrieve/synthesise/verify nodes
+# report their prompts, responses and retrieved context under the
+# configured project. With no key set @traceable is a transparent
+# pass-through and the agent runs without any external telemetry.
 LANGSMITH_API_KEY = env("LANGSMITH_API_KEY", default="")
 LANGSMITH_PROJECT = env("LANGSMITH_PROJECT", default="rag-docs-chatbot")
+# The default LangSmith API host is US; an EU workspace key is
+# rejected with 403 there and must point at the EU host instead.
+LANGSMITH_ENDPOINT = env("LANGSMITH_ENDPOINT", default="")
 if LANGSMITH_API_KEY:
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_API_KEY", LANGSMITH_API_KEY)
     os.environ.setdefault("LANGCHAIN_PROJECT", LANGSMITH_PROJECT)
+    if LANGSMITH_ENDPOINT:
+        os.environ.setdefault("LANGCHAIN_ENDPOINT", LANGSMITH_ENDPOINT)
 
 # Ragas evaluation
 # ------------------------------------------------------------------
