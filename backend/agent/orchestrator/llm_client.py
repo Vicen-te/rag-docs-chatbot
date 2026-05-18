@@ -18,6 +18,7 @@ from typing import Iterable
 
 import requests
 from django.conf import settings
+from langsmith import traceable
 from openai import OpenAI
 
 _openai_client: OpenAI | None = None
@@ -44,7 +45,11 @@ def _ollama_native_base() -> str:
 
 
 def _ollama_options(temperature: float) -> dict:
-    return {"num_ctx": settings.OLLAMA_NUM_CTX, "temperature": temperature}
+    return {
+        "num_ctx": settings.OLLAMA_NUM_CTX,
+        "num_predict": settings.OLLAMA_NUM_PREDICT,
+        "temperature": temperature,
+    }
 
 
 def _to_openai_message(msg: dict) -> dict:
@@ -79,6 +84,11 @@ def _ollama_native_chat(
         "model": model,
         "messages": messages,
         "stream": False,
+        # qwen3-class models put chain-of-thought in message.thinking,
+        # which this client does not read; with thinking on the answer
+        # never reaches message.content and a long reasoning pass can
+        # run away. The corrective-RAG graph is the reasoning structure.
+        "think": False,
         "options": _ollama_options(temperature),
     }
     if tools:
@@ -109,11 +119,15 @@ def _openai_chat(
         messages=messages,
         tools=tools,
         temperature=temperature,
-        extra_body={"options": {"num_ctx": settings.OLLAMA_NUM_CTX}},
+        extra_body={"options": {
+            "num_ctx": settings.OLLAMA_NUM_CTX,
+            "num_predict": settings.OLLAMA_NUM_PREDICT,
+        }},
     )
     return response.model_dump()
 
 
+@traceable(run_type="llm", name="chat_completion")
 def chat_completion(
     messages: list[dict],
     model: str | None = None,
@@ -135,6 +149,7 @@ def _ollama_native_stream(
         "model": model,
         "messages": messages,
         "stream": True,
+        "think": False,  # see _ollama_native_chat: keep CoT out of the stream
         "options": _ollama_options(temperature),
     }
     with requests.post(
@@ -168,7 +183,10 @@ def _openai_stream(
         messages=messages,
         temperature=temperature,
         stream=True,
-        extra_body={"options": {"num_ctx": settings.OLLAMA_NUM_CTX}},
+        extra_body={"options": {
+            "num_ctx": settings.OLLAMA_NUM_CTX,
+            "num_predict": settings.OLLAMA_NUM_PREDICT,
+        }},
     )
     for chunk in stream:
         delta = chunk.choices[0].delta.content
@@ -176,6 +194,7 @@ def _openai_stream(
             yield delta
 
 
+@traceable(run_type="llm", name="chat_completion_stream")
 def chat_completion_stream(
     messages: list[dict],
     model: str | None = None,

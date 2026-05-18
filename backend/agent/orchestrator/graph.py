@@ -18,6 +18,7 @@ from typing import TypedDict
 
 from django.conf import settings
 from langgraph.graph import END, StateGraph
+from langsmith import traceable
 
 from agent.kb.reranker import rerank
 from agent.kb.search import hybrid_search
@@ -88,6 +89,7 @@ def _merge_searches(subqueries: list[str], mode: str, per_k: int):
     return merged
 
 
+@traceable(run_type="retriever", name="retrieve")
 def _retrieve(state: AgentState, config) -> AgentState:
     mode = state.get("retrieval_mode", "hybrid")
     if mode == "none":
@@ -106,15 +108,21 @@ def _retrieve(state: AgentState, config) -> AgentState:
     else:
         hits = _merge_searches(subqueries, mode, top_k)[:top_k]
     state["context"] = [
-        {"document_id": h.document_id, "content": h.content, "score": h.score}
+        {
+            "document_id": h.document_id,
+            "document_name": h.document_name,
+            "content": h.content,
+            "score": h.score,
+        }
         for h in hits
     ]
     return state
 
 
+@traceable(run_type="chain", name="synthesise")
 def _synthesise(state: AgentState, config) -> AgentState:
     context_block = "\n\n".join(
-        f"[doc:{c['document_id']}]\n{c['content']}"
+        f"[doc:{c['document_name']}]\n{c['content']}"
         for c in state.get("context", [])
     )
     system_prompt = "\n\n".join(
@@ -143,6 +151,7 @@ def _synthesise(state: AgentState, config) -> AgentState:
     return state
 
 
+@traceable(run_type="chain", name="verify")
 def _verify(state: AgentState, config) -> AgentState:
     messages = [
         {"role": "system", "content": prompts.VERIFY},

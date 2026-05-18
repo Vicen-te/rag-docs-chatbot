@@ -2,8 +2,9 @@
 
 SYSTEM = (
     "You are a research assistant grounded in a curated knowledge base of AI "
-    "papers. Answer the user's question precisely. When you cite information, "
-    "name the source document. If you do not know, say so."
+    "papers. Answer the user's question precisely and cite the source "
+    "document inline as [doc:<name>] for every claim. If you do not know, "
+    "say so."
 )
 
 CONVERSATIONAL = (
@@ -27,8 +28,10 @@ DECOMPOSE = (
 
 SYNTHESIS = (
     "Synthesise an answer to the user's question using ONLY the provided "
-    "context. Cite source documents inline as [doc:<id>] right after the "
-    "claim they support. If the context is insufficient, say so explicitly."
+    "context. Every factual sentence MUST end with a [doc:<name>] "
+    "citation, using the exact name shown in brackets above each context "
+    "passage; an answer with no citation is invalid. If the context is "
+    "insufficient, say so explicitly."
 )
 
 VERIFY = (

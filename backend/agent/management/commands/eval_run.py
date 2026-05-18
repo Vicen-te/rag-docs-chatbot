@@ -41,7 +41,7 @@ ABSTAIN_PATTERNS = [
 ]
 ABSTAIN_RE = re.compile("|".join(ABSTAIN_PATTERNS), re.IGNORECASE)
 
-CITATION_RE = re.compile(r"\[doc:[0-9a-fA-F-]{6,}\]")
+CITATION_RE = re.compile(r"\[doc:[^\]\s]+\]")
 
 
 def _basename(source_path: str) -> str:

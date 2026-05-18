@@ -1,6 +1,7 @@
 """Retrieval over KB chunks: semantic, lexical, hybrid (RRF)."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -16,6 +17,7 @@ Mode = Literal["semantic", "lexical", "hybrid"]
 class SearchHit:
     chunk_id: str
     document_id: str
+    document_name: str
     content: str
     score: float
     parent_id: str | None
@@ -44,12 +46,14 @@ def _semantic_search(query: str, top_k: int) -> list[SearchHit]:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT id::text, document_id::text, content,
-                       (embedding <=> %s::vector) AS distance,
-                       parent_chunk_id::text, chunk_type
-                FROM agent_kbchunk
-                WHERE chunk_type = 'child' AND embedding IS NOT NULL
-                ORDER BY embedding <=> %s::vector
+                SELECT c.id::text, c.document_id::text,
+                       d.source_path, d.title, c.content,
+                       (c.embedding <=> %s::vector) AS distance,
+                       c.parent_chunk_id::text, c.chunk_type
+                FROM agent_kbchunk c
+                JOIN agent_kbdocument d ON d.id = c.document_id
+                WHERE c.chunk_type = 'child' AND c.embedding IS NOT NULL
+                ORDER BY c.embedding <=> %s::vector
                 LIMIT %s
                 """,
                 [qvec, qvec, top_k],
@@ -59,25 +63,34 @@ def _semantic_search(query: str, top_k: int) -> list[SearchHit]:
         SearchHit(
             chunk_id=r[0],
             document_id=r[1],
-            content=r[2],
-            score=1.0 - float(r[3]),
-            parent_id=r[4],
-            chunk_type=r[5],
+            document_name=os.path.basename(r[2]) or r[3] or r[1],
+            content=r[4],
+            score=1.0 - float(r[5]),
+            parent_id=r[6],
+            chunk_type=r[7],
         )
         for r in rows
     ]
 
 
 def _lexical_search(query: str, top_k: int) -> list[SearchHit]:
+    # pg_trgm `content % query` ranks by similarity(), which is
+    # symmetric and normalised over the union of both strings'
+    # trigrams: a short query against a ~512-token child chunk
+    # scores far below the default 0.3 threshold, so this lexical
+    # channel returns almost nothing and hybrid retrieval is
+    # dense-dominated on prose corpora.
     with transaction.atomic():
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT id::text, document_id::text, content,
-                       similarity(content, %s) AS score,
-                       parent_chunk_id::text, chunk_type
-                FROM agent_kbchunk
-                WHERE chunk_type = 'child' AND content %% %s
+                SELECT c.id::text, c.document_id::text,
+                       d.source_path, d.title, c.content,
+                       similarity(c.content, %s) AS score,
+                       c.parent_chunk_id::text, c.chunk_type
+                FROM agent_kbchunk c
+                JOIN agent_kbdocument d ON d.id = c.document_id
+                WHERE c.chunk_type = 'child' AND c.content %% %s
                 ORDER BY score DESC
                 LIMIT %s
                 """,
@@ -88,10 +101,11 @@ def _lexical_search(query: str, top_k: int) -> list[SearchHit]:
         SearchHit(
             chunk_id=r[0],
             document_id=r[1],
-            content=r[2],
-            score=float(r[3]),
-            parent_id=r[4],
-            chunk_type=r[5],
+            document_name=os.path.basename(r[2]) or r[3] or r[1],
+            content=r[4],
+            score=float(r[5]),
+            parent_id=r[6],
+            chunk_type=r[7],
         )
         for r in rows
     ]
