@@ -1,4 +1,4 @@
-# Compare: 20260517T121758Z (hybrid) vs 20260517T125302Z (semantic)
+# Compare: 20260518T193827Z (hybrid) vs 20260518T194439Z (semantic)
 
 - questions compared: 25
 
@@ -8,15 +8,15 @@
 |---|---|---|---|
 | retrieval_hit | 100.00% | 100.00% | +0.0pp |
 | retrieval_recall | 94.67% | 94.67% | +0.0pp |
-| keyword_hit | 100.00% | 100.00% | +0.0pp |
-| citation_present | 100.00% | 96.00% | -4.0pp |
+| keyword_hit | 95.45% | 95.45% | +0.0pp |
+| citation_present | 96.00% | 96.00% | +0.0pp |
 
 ## By category
 
 | category | n | hit@k A->B | recall A->B | kw hit A->B |
 |---|---|---|---|---|
 | single_hop | 8 | 100% -> 100% (+0.0pp) | 100% -> 100% (+0.0pp) | 100% -> 100% (+0.0pp) |
-| multi_hop | 6 | 100% -> 100% (+0.0pp) | 83% -> 83% (+0.0pp) | 100% -> 100% (+0.0pp) |
+| multi_hop | 6 | 100% -> 100% (+0.0pp) | 83% -> 83% (+0.0pp) | 83% -> 83% (+0.0pp) |
 | detail_tech | 5 | 100% -> 100% (+0.0pp) | 100% -> 100% (+0.0pp) | 100% -> 100% (+0.0pp) |
 | synthesis | 3 | 100% -> 100% (+0.0pp) | 89% -> 89% (+0.0pp) | 100% -> 100% (+0.0pp) |
 | negative | 3 | 100% -> 100% (+0.0pp) | 100% -> 100% (+0.0pp) | - |
@@ -31,7 +31,7 @@
 | dt-04 | detail_tech | Y -> Y | 100% -> 100% | Y -> Y |
 | dt-05 | detail_tech | Y -> Y | 100% -> 100% | Y -> Y |
 | mh-01 | multi_hop | Y -> Y | 100% -> 100% | Y -> Y |
-| mh-02 | multi_hop | Y -> Y | 50% -> 50% | Y -> Y |
+| mh-02 | multi_hop | Y -> Y | 50% -> 50% | N -> N |
 | mh-03 | multi_hop | Y -> Y | 100% -> 100% | Y -> Y |
 | mh-04 | multi_hop | Y -> Y | 100% -> 100% | Y -> Y |
 | mh-05 | multi_hop | Y -> Y | 100% -> 100% | Y -> Y |
