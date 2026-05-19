@@ -8,7 +8,7 @@ from typing import Literal
 from django.conf import settings
 from django.db import connection, transaction
 
-from agent.memory.embeddings import embed_query
+from rag.memory.embeddings import embed_query
 
 Mode = Literal["semantic", "lexical", "hybrid"]
 
@@ -50,8 +50,8 @@ def _semantic_search(query: str, top_k: int) -> list[SearchHit]:
                        d.source_path, d.title, c.content,
                        (c.embedding <=> %s::vector) AS distance,
                        c.parent_chunk_id::text, c.chunk_type
-                FROM agent_kbchunk c
-                JOIN agent_kbdocument d ON d.id = c.document_id
+                FROM rag_kbchunk c
+                JOIN rag_kbdocument d ON d.id = c.document_id
                 WHERE c.chunk_type = 'child' AND c.embedding IS NOT NULL
                 ORDER BY c.embedding <=> %s::vector
                 LIMIT %s
@@ -88,8 +88,8 @@ def _lexical_search(query: str, top_k: int) -> list[SearchHit]:
                        d.source_path, d.title, c.content,
                        similarity(c.content, %s) AS score,
                        c.parent_chunk_id::text, c.chunk_type
-                FROM agent_kbchunk c
-                JOIN agent_kbdocument d ON d.id = c.document_id
+                FROM rag_kbchunk c
+                JOIN rag_kbdocument d ON d.id = c.document_id
                 WHERE c.chunk_type = 'child' AND c.content %% %s
                 ORDER BY score DESC
                 LIMIT %s

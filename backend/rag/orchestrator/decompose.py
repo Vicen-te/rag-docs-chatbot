@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 
-from agent.orchestrator import prompts
-from agent.orchestrator.llm_client import chat_completion
+from rag.orchestrator import prompts
+from rag.orchestrator.llm_client import chat_completion
 
 _MAX_SUBQUERIES = 3
 

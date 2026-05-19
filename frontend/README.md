@@ -2,7 +2,7 @@
 
 Minimal React + Vite client for the rag-docs-chatbot API. Two screens:
 a login form (calls `/api/token/`) and a chat view that streams the
-agent's response via SSE from `/api/agent/chat/`.
+pipeline's response via SSE from `/api/rag/chat/`.
 
 ## Run
 

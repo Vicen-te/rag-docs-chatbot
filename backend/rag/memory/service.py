@@ -1,13 +1,13 @@
 """Read/write API for semantic and episodic memory.
 
-Every write appends a row to MemoryAudit so the agent's mutations
+Every write appends a row to MemoryAudit so the pipeline's mutations
 can be traced after the fact.
 """
 from __future__ import annotations
 
 from django.db import transaction
 
-from agent.models import EpisodicMemory, MemoryAudit, SemanticMemory
+from rag.models import EpisodicMemory, MemoryAudit, SemanticMemory
 
 
 def store_semantic(

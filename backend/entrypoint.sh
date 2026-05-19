@@ -2,7 +2,7 @@
 set -e
 
 python manage.py init_extensions
-python manage.py makemigrations agent --noinput
+python manage.py makemigrations rag --noinput
 python manage.py migrate --noinput
 python manage.py collectstatic --no-input
 

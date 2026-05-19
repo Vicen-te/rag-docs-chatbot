@@ -38,4 +38,4 @@ eval/results/
 papers/*.pdf
 
 # Django migrations (regenerated locally)
-backend/agent/migrations/0*.py
+backend/rag/migrations/0*.py

@@ -1,7 +1,7 @@
-"""KB-related tools the agent can invoke."""
+"""KB-related tools the pipeline can invoke."""
 from __future__ import annotations
 
-from agent.kb.search import hybrid_search
+from rag.kb.search import hybrid_search
 
 
 def kb_search(query: str, top_k: int = 5, mode: str = "hybrid") -> list[dict]:

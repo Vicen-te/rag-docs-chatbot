@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from agent.models import (
+from rag.models import (
     Conversation,
     Message,
     MessageFeedback,

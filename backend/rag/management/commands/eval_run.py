@@ -1,7 +1,7 @@
-"""Run the eval dataset against retrieval and the full agent pipeline.
+"""Run the eval dataset against retrieval and the full RAG pipeline.
 
 Reads `eval/dataset.jsonl`, runs each question through `hybrid_search`
-and `run_agent`, scores per-question metrics, and writes a markdown
+and `run_pipeline`, scores per-question metrics, and writes a markdown
 summary plus a JSONL of raw per-question records under
 `eval/results/<timestamp>/`.
 
@@ -23,9 +23,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from agent.kb.search import hybrid_search
-from agent.models import KBDocument
-from agent.orchestrator.graph import run_agent
+from rag.kb.search import hybrid_search
+from rag.models import KBDocument
+from rag.orchestrator.graph import run_pipeline
 
 ABSTAIN_PATTERNS = [
     r"\bi (?:do not|don't|cannot|can't) (?:know|find|answer)\b",
@@ -105,7 +105,7 @@ def _fmt_eta(seconds: float) -> str:
 
 
 class Command(BaseCommand):
-    help = "Run the eval dataset against the agent pipeline."
+    help = "Run the eval dataset against the RAG pipeline."
 
     def add_arguments(self, parser):
         default_dataset = Path(settings.BASE_DIR).parent / "eval" / "dataset.jsonl"
@@ -126,7 +126,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--user", type=str, default="eval-bot",
-            help="Username used for the agent pipeline.",
+            help="Username used for the RAG pipeline.",
         )
         parser.add_argument(
             "--retrieval",
@@ -134,7 +134,7 @@ class Command(BaseCommand):
             choices=["hybrid", "semantic", "none"],
             default="hybrid",
             help=(
-                "Retrieval mode for both the metrics call and the agent: "
+                "Retrieval mode for both the metrics call and the pipeline: "
                 "'hybrid' (pgvector + pg_trgm via RRF), 'semantic' "
                 "(embeddings only), 'none' (no retrieval -- the LLM "
                 "answers from its own knowledge as a control)."
@@ -250,7 +250,7 @@ class Command(BaseCommand):
         if run_chat:
             t1 = time.perf_counter()
             try:
-                state = run_agent(
+                state = run_pipeline(
                     user, uuid.uuid4(), question, retrieval_mode=retrieval_mode,
                 )
                 answer = state.get("final", "") or ""

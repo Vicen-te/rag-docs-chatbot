@@ -1,6 +1,6 @@
 from django.urls import path
 
-from agent.views import (
+from rag.views import (
     ChatView,
     ConversationDetailView,
     ConversationListView,

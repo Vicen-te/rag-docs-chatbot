@@ -7,17 +7,17 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from agent.kb.search import hybrid_search
-from agent.models import Conversation, Message, MessageFeedback, SemanticMemory
-from agent.orchestrator.graph import stream_agent
-from agent.orchestrator.streaming import (
+from rag.kb.search import hybrid_search
+from rag.models import Conversation, Message, MessageFeedback, SemanticMemory
+from rag.orchestrator.graph import stream_pipeline
+from rag.orchestrator.streaming import (
     format_sse_event,
     sse_done,
     sse_error,
     sse_step,
     sse_token,
 )
-from agent.serializers import (
+from rag.serializers import (
     ChatRequestSerializer,
     ConversationSerializer,
     KBSearchHitSerializer,
@@ -95,7 +95,7 @@ class ChatView(APIView):
                     "user_message_id": str(user_msg.id),
                 })
                 final = ""
-                for ev in stream_agent(user, conversation.id, user_text):
+                for ev in stream_pipeline(user, conversation.id, user_text):
                     if ev["type"] == "step":
                         yield sse_step(ev["node"], ev["diff"], ev["state"])
                     else:

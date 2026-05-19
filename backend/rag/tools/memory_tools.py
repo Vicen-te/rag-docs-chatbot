@@ -1,7 +1,7 @@
-"""Memory-related tools the agent can invoke."""
+"""Memory-related tools the pipeline can invoke."""
 from __future__ import annotations
 
-from agent.memory.service import recall_semantic, store_semantic
+from rag.memory.service import recall_semantic, store_semantic
 
 
 def store_semantic_memory(user, category: str, key: str, value: str) -> dict:

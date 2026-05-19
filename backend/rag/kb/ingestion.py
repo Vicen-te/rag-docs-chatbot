@@ -11,8 +11,8 @@ from docx import Document as DocxDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
-from agent.memory.embeddings import embed_texts
-from agent.models import KBChunk, KBDocument
+from rag.memory.embeddings import embed_texts
+from rag.models import KBChunk, KBDocument
 
 
 def compute_file_hash(path: Path) -> str:

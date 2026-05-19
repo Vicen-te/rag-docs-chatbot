@@ -8,7 +8,7 @@ Dispatches on `settings.LLM_PROVIDER`:
   OpenAI-compatible endpoint).
 
 Both paths return an OpenAI-shaped dict so callers in
-``agent/orchestrator/graph.py`` are provider-agnostic.
+``rag/orchestrator/graph.py`` are provider-agnostic.
 """
 from __future__ import annotations
 

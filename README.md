@@ -55,7 +55,7 @@ this README.
 
 ### Architecture
 
-The agent is a corrective-RAG state machine (LangGraph). `intake`
+The pipeline is a corrective-RAG state machine (LangGraph). `intake`
 loads memory, `classify` routes conversational turns away from
 retrieval, and the `verify` node loops back to `synthesise` until the
 answer is grounded or the retry budget is spent. Rendered from the
@@ -101,11 +101,11 @@ rag-docs-chatbot/
 |   |-- manage.py
 |   |-- requirements.txt
 |   |-- config/               # Django project (settings, urls, wsgi, asgi)
-|   `-- agent/                # Single app
+|   `-- rag/                  # Single app
 |       |-- kb/               # Ingestion, search (semantic + lexical + RRF), reranker
 |       |-- memory/           # Embeddings helper + read/write API
 |       |-- orchestrator/     # Prompts, LLM client, router, guardrails, LangGraph
-|       |-- tools/            # Tool registry exposed to the agent
+|       |-- tools/            # Tool registry exposed to the pipeline
 |       `-- management/       # Custom manage.py commands (ingest, eval, ragas)
 |-- frontend/                 # React + Vite SPA (login + streaming chat); nginx Dockerfile
 |-- eval/                     # dataset.jsonl + generated results/ (gitignored)
@@ -184,7 +184,7 @@ extension binaries must already be present on the server.
 
 ```powershell
 python manage.py init_extensions
-python manage.py makemigrations agent
+python manage.py makemigrations rag
 python manage.py migrate
 python manage.py createsuperuser
 ```
@@ -208,8 +208,8 @@ start the frontend below for the chat UI.
 ### Frontend
 
 A React + Vite single-page app under `frontend/`: a login form
-(`/api/token/`) and a chat view that streams the agent's answer over
-SSE from `/api/agent/chat/`, rendering the agent's step trace
+(`/api/token/`) and a chat view that streams the pipeline's answer over
+SSE from `/api/rag/chat/`, rendering the pipeline's step trace
 (retrieve / synthesise / verify) as it runs.
 
 ```powershell
@@ -223,7 +223,7 @@ to `http://127.0.0.1:8000`, so the backend must be running first.
 For a no-Node setup the Docker stack builds and serves this same SPA
 behind nginx on port 80 -- see *Docker stack*.
 
-The UI surfaces the agent's behaviour directly: the collapsible
+The UI surfaces the pipeline's behaviour directly: the collapsible
 "process" panel shows the graph's steps, answers render Markdown +
 KaTeX, and every grounded claim carries a `[doc:<name>]` citation.
 The four behaviours the eval exercises, in the product:
@@ -323,13 +323,13 @@ ingested files are reported as duplicates.
 |---|---|---|
 | `POST` | `/api/token/` | Obtain access + refresh token |
 | `POST` | `/api/token/refresh/` | Refresh access token |
-| `POST` | `/api/agent/chat/` | Chat with the agent (SSE stream) |
-| `GET`  | `/api/agent/kb/search/?query=...&mode=hybrid` | Raw retrieval |
-| `GET`, `POST` | `/api/agent/memory/semantic/` | List or create memory facts |
-| `GET`, `PUT`, `DELETE` | `/api/agent/memory/semantic/<uuid>/` | Per-fact CRUD |
-| `GET` | `/api/agent/conversations/` | List user conversations |
-| `GET`, `DELETE` | `/api/agent/conversations/<uuid>/` | Detail or delete |
-| `POST` | `/api/agent/feedback/` | Thumbs up / down on a message |
+| `POST` | `/api/rag/chat/` | Chat with the pipeline (SSE stream) |
+| `GET`  | `/api/rag/kb/search/?query=...&mode=hybrid` | Raw retrieval |
+| `GET`, `POST` | `/api/rag/memory/semantic/` | List or create memory facts |
+| `GET`, `PUT`, `DELETE` | `/api/rag/memory/semantic/<uuid>/` | Per-fact CRUD |
+| `GET` | `/api/rag/conversations/` | List user conversations |
+| `GET`, `DELETE` | `/api/rag/conversations/<uuid>/` | Detail or delete |
+| `POST` | `/api/rag/feedback/` | Thumbs up / down on a message |
 
 ## Evaluation and results
 
@@ -605,7 +605,7 @@ sample.
   in the corpus -- the model is bypassing the retrieved context.
 - High `retrieval hit@k` but low `answer keyword hit` -- retrieval
   finds the paper, the synthesis prompt is not using it. Check the
-  prompts in `backend/agent/orchestrator/prompts.py` and
+  prompts in `backend/rag/orchestrator/prompts.py` and
   `OLLAMA_NUM_CTX` (chunks may be getting truncated).
 - Confident answers to `neg-*` questions -- the verifier is too
   lenient or the system prompt does not enforce abstention.
@@ -624,7 +624,7 @@ Change one knob at a time, re-run the eval, diff the summaries:
 - weak `detail_tech` -> raise `OLLAMA_NUM_CTX`, or lower
   `KB_CHILD_CHUNK_SIZE` (requires re-ingest).
 - weak `synthesis` -> tune prompts in
-  `backend/agent/orchestrator/prompts.py`.
+  `backend/rag/orchestrator/prompts.py`.
 - weak `negative` -> tighten the verifier prompt or raise
   `AGENT_MAX_VERIFY_RETRIES`.
 - weak `single_hop` (rare once retrieval works at all) -> revisit
@@ -659,7 +659,7 @@ defaults. The most impactful ones:
 - `RAGAS_JUDGE_PROVIDER` -- judge LLM for `ragas_run` (`ollama` or
   `openai`).
 
-Prompts live in `backend/agent/orchestrator/prompts.py`.
+Prompts live in `backend/rag/orchestrator/prompts.py`.
 
 ### Observability
 

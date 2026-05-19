@@ -7,7 +7,7 @@ from threading import Lock
 from django.conf import settings
 from sentence_transformers import CrossEncoder
 
-from agent.kb.search import SearchHit
+from rag.kb.search import SearchHit
 
 _model: CrossEncoder | None = None
 _lock = Lock()

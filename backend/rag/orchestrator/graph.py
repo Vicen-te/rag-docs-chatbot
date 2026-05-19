@@ -20,14 +20,14 @@ from django.conf import settings
 from langgraph.graph import END, StateGraph
 from langsmith import traceable
 
-from agent.kb.reranker import rerank
-from agent.kb.search import hybrid_search
-from agent.memory.service import format_memory_for_prompt
-from agent.orchestrator import prompts
-from agent.orchestrator.decompose import decompose_query
-from agent.orchestrator.guardrails import sanitize
-from agent.orchestrator.llm_client import chat_completion
-from agent.orchestrator.router import classify_task_type, try_fast_route
+from rag.kb.reranker import rerank
+from rag.kb.search import hybrid_search
+from rag.memory.service import format_memory_for_prompt
+from rag.orchestrator import prompts
+from rag.orchestrator.decompose import decompose_query
+from rag.orchestrator.guardrails import sanitize
+from rag.orchestrator.llm_client import chat_completion
+from rag.orchestrator.router import classify_task_type, try_fast_route
 
 
 class AgentState(TypedDict, total=False):
@@ -216,7 +216,7 @@ def build_graph():
 GRAPH = build_graph()
 
 
-def run_agent(
+def run_pipeline(
     user,
     conversation_id,
     user_message: str,
@@ -232,7 +232,7 @@ def run_agent(
     return GRAPH.invoke(initial, config={"configurable": {"user": user}})
 
 
-def stream_agent(
+def stream_pipeline(
     user,
     conversation_id,
     user_message: str,

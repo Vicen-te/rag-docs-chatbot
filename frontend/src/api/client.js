@@ -20,13 +20,13 @@ export async function login(username, password) {
 }
 
 export async function listConversations(token) {
-  const res = await fetch('/api/agent/conversations/', { headers: json(token) });
+  const res = await fetch('/api/rag/conversations/', { headers: json(token) });
   if (!res.ok) throw new Error(`conversations failed (${res.status})`);
   return res.json();
 }
 
 export async function getConversation(token, id) {
-  const res = await fetch(`/api/agent/conversations/${id}/`, {
+  const res = await fetch(`/api/rag/conversations/${id}/`, {
     headers: json(token),
   });
   if (!res.ok) throw new Error(`conversation failed (${res.status})`);
@@ -34,7 +34,7 @@ export async function getConversation(token, id) {
 }
 
 export async function deleteConversation(token, id) {
-  const res = await fetch(`/api/agent/conversations/${id}/`, {
+  const res = await fetch(`/api/rag/conversations/${id}/`, {
     method: 'DELETE',
     headers: json(token),
   });
@@ -44,7 +44,7 @@ export async function deleteConversation(token, id) {
 }
 
 export async function submitFeedback(token, { message, rating, comment }) {
-  const res = await fetch('/api/agent/feedback/', {
+  const res = await fetch('/api/rag/feedback/', {
     method: 'POST',
     headers: json(token),
     body: JSON.stringify({
@@ -79,7 +79,7 @@ export async function streamChat({
   } else {
     body.message = message;
   }
-  const res = await fetch('/api/agent/chat/', {
+  const res = await fetch('/api/rag/chat/', {
     method: 'POST',
     headers: json(token),
     body: JSON.stringify(body),

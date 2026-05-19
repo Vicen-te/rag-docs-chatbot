@@ -71,7 +71,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "agent",
+    "rag",
 ]
 
 MIDDLEWARE = [
@@ -197,7 +197,7 @@ KB_RERANKER_MODEL = env(
 
 # Agent / LLM
 # ------------------------------------------------------------------
-# LLM_PROVIDER selects the transport in agent/orchestrator/llm_client.py:
+# LLM_PROVIDER selects the transport in rag/orchestrator/llm_client.py:
 # "ollama" hits Ollama's native /api/chat (honours options.num_ctx);
 # "openai" uses the OpenAI SDK against OLLAMA_BASE_URL (kept for any
 # OpenAI-compatible endpoint, where API key is enforced).
@@ -261,7 +261,7 @@ REST_FRAMEWORK = {
         "user": "60/min",
         "anon": "10/min",
     },
-    "EXCEPTION_HANDLER": "agent.exception_handler.custom_exception_handler",
+    "EXCEPTION_HANDLER": "rag.exception_handler.custom_exception_handler",
 }
 
 SIMPLE_JWT = {
@@ -277,7 +277,7 @@ SIMPLE_JWT = {
 # chat_completion_stream) and the retrieve/synthesise/verify nodes
 # report their prompts, responses and retrieved context under the
 # configured project. With no key set @traceable is a transparent
-# pass-through and the agent runs without any external telemetry.
+# pass-through and the pipeline runs without any external telemetry.
 LANGSMITH_API_KEY = env("LANGSMITH_API_KEY", default="")
 LANGSMITH_PROJECT = env("LANGSMITH_PROJECT", default="rag-docs-chatbot")
 # The default LangSmith API host is US; an EU workspace key is

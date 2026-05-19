@@ -6,7 +6,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand
 from django.db import IntegrityError
 
-from agent.kb.ingestion import ingest_document
+from rag.kb.ingestion import ingest_document
 
 SUPPORTED_SUFFIXES = {".pdf", ".docx", ".html", ".htm", ".txt", ".md"}
 
