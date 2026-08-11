@@ -87,7 +87,8 @@ def _ollama_native_chat(
         # qwen3-class models put chain-of-thought in message.thinking,
         # which this client does not read; with thinking on the answer
         # never reaches message.content and a long reasoning pass can
-        # run away. The corrective-RAG graph is the reasoning structure.
+        # run away. The graph's synthesise/verify loop is the
+        # reasoning structure.
         "think": False,
         "options": _ollama_options(temperature),
     }

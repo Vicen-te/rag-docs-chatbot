@@ -1,4 +1,4 @@
-"""Corrective-RAG state graph.
+"""RAG state graph with a grounding self-verification loop.
 
 Deterministic LangGraph pipeline with an intent router and an
 LLM-as-judge self-critique loop:
@@ -6,9 +6,14 @@ LLM-as-judge self-critique loop:
     intake -> classify -> (conversational | retrieve -> synthesise -> verify) -> END
 
 The verify node loops back to synthesise up to AGENT_MAX_VERIFY_RETRIES
-when the candidate answer fails the grounded-answer check. Retrieval
-is not LLM-driven (no ReAct-style tool selection) -- the graph
-invokes hybrid_search unconditionally on the knowledge branch.
+when the candidate answer fails the grounded-answer check. Correction
+is answer-level: the retry re-synthesises against the same context.
+This is not canonical CRAG (Yan et al., 2024, arXiv:2401.15884),
+which grades the retrieved documents and triggers re-retrieval or web
+search when the context is poor; there is no document-level evaluator
+here. Retrieval is not LLM-driven either (no ReAct-style tool
+selection) -- the graph invokes hybrid_search unconditionally on the
+knowledge branch.
 """
 from __future__ import annotations
 

@@ -1,10 +1,10 @@
 # rag-docs-chatbot
 
-A corrective-RAG chatbot over a corpus of deep learning
-papers. Hybrid retrieval (pgvector + pg_trgm + RRF) feeds a
-LangGraph retrieve -> synthesise -> verify loop; a
-deterministic eval harness and Ragas back every number in
-this README.
+A RAG chatbot with a grounding self-verification loop over a
+corpus of deep learning papers. Hybrid retrieval (pgvector +
+pg_trgm + RRF) feeds a LangGraph retrieve -> synthesise ->
+verify loop; a deterministic eval harness and Ragas back every
+number in this README.
 
 ## Table of contents
 
@@ -48,18 +48,19 @@ this README.
 | Embeddings | `sentence-transformers` (`BAAI/bge-small-en-v1.5`, 384-dim) |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
 | LLM | Ollama native API or any OpenAI-compatible endpoint (`LLM_PROVIDER`) |
-| Orchestrator | LangGraph (corrective-RAG: router + retrieve + synthesise + verify loop) |
+| Orchestrator | LangGraph (router + retrieve + synthesise + answer-verification loop) |
 | Frontend | React + Vite SPA, SSE token streaming |
 | Eval (optional) | Custom harness + Ragas metrics |
 | Tracing (optional) | LangSmith (`@traceable` LLM + LangGraph nodes) |
 
 ### Architecture
 
-The pipeline is a corrective-RAG state machine (LangGraph). `intake`
-loads memory, `classify` routes conversational turns away from
-retrieval, and the `verify` node loops back to `synthesise` until the
-answer is grounded or the retry budget is spent. Rendered from the
-compiled graph (`GRAPH.get_graph().draw_mermaid()`):
+The pipeline is a LangGraph state machine with an answer-level
+self-verification loop. `intake` loads memory, `classify` routes
+conversational turns away from retrieval, and the `verify` node loops
+back to `synthesise` until the answer is grounded or the retry budget
+is spent. Rendered from the compiled graph
+(`GRAPH.get_graph().draw_mermaid()`):
 
 ```mermaid
 graph TD;
@@ -84,6 +85,13 @@ graph TD;
 	classDef first fill-opacity:0
 	classDef last fill:#bfb6fc
 ```
+
+**Note on naming:** the verify loop critiques the generated answer
+and regenerates it against the same context. It is not canonical
+CRAG ([Yan et al., 2024](https://arxiv.org/abs/2401.15884)), which
+grades the retrieved documents and triggers re-retrieval or web
+search when the context is poor. Document-level correction is not
+implemented here.
 
 ### Project structure
 
@@ -235,11 +243,11 @@ The four behaviours the eval exercises, in the product:
 | Multi-hop, two sources | Abstention on an off-corpus question |
 | ![multi-hop answer citing vit.pdf and attention.pdf](docs/ui-multi-hop.png) | ![the model refuses an off-corpus question instead of inventing](docs/ui-abstain.png) |
 
-The corrective loop is visible to the user too -- `verify` rejects
+The verification loop is visible to the user too -- `verify` rejects
 the first draft and the answer is revised before it is shown
 (`retry 1 ... accepted after 2` in the step trace):
 
-![the corrective retry loop shown in the chat UI step trace](docs/ui-corrective.png)
+![the verify retry loop shown in the chat UI step trace](docs/ui-corrective.png)
 
 ### Docker stack
 
@@ -463,10 +471,10 @@ Generation runs with the model's chain-of-thought disabled
 (`think:false`): this client consumes `message.content`, and a
 qwen3-class model otherwise spends its token budget in a separate
 `thinking` field (yielding empty answers and multi-minute runs).
-The corrective-RAG graph is the reasoning structure, so nothing is
-lost; chat latency drops ~5x (p50 ~15s) and every number here is
-measured in this configuration. Citations are the readable source
-filename, e.g. `[doc:attention.pdf]`.
+The graph's synthesise/verify loop is the reasoning structure, so
+nothing is lost; chat latency drops ~5x (p50 ~15s) and every number
+here is measured in this configuration. Citations are the readable
+source filename, e.g. `[doc:attention.pdf]`.
 
 Ragas (22 non-negative questions, canonical `top_k=12` run;
 negatives are abstention tests, not answers, scored by abstention).
@@ -689,12 +697,11 @@ Each chat request then produces one trace under the project showing:
 The clean RAG path -- a single pass, `verify` accepts the first
 draft (`verify_iterations: 1`):
 
-![LangSmith trace of the corrective-RAG graph for one chat request](docs/langsmith-trace.png)
+![LangSmith trace of the LangGraph pipeline for one chat request](docs/langsmith-trace.png)
 
-The "corrective" in corrective-RAG, captured live on a synthesis
-question: `verify` rejects the first draft, the graph loops back to
-`synthesise`, and the revised answer is accepted
-(`verify_iterations: 2`):
+Self-verification captured live on a synthesis question: `verify`
+rejects the first draft, the graph loops back to `synthesise`, and
+the revised answer is accepted (`verify_iterations: 2`):
 
 ![LangSmith trace where verify rejects the first answer and the graph loops back to synthesise](docs/langsmith-retry.png)
 

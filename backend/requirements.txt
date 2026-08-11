@@ -35,7 +35,7 @@ whitenoise==6.11.0
 # Agent / LLM
 # ============================================================
 openai==2.36.0                       # Used as OpenAI-compatible client against Ollama
-langgraph==1.1.10                    # corrective-RAG state machine
+langgraph==1.1.10                    # retrieve/synthesise/verify state machine
 sentence-transformers==5.4.1         # Local embeddings (default: BAAI/bge-small-en-v1.5)
 
 # ============================================================
