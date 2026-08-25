@@ -29,9 +29,13 @@ Thumbs.db
 files/
 data/
 
-# Eval outputs
+# Eval outputs (generated). The three runs the README quotes are committed on purpose:
+# canonical hybrid top_k=12 run (+ Ragas) and the two ablations it is compared against.
 eval_results/
-eval/results/
+eval/results/*
+!eval/results/20260518T193827Z/
+!eval/results/20260518T194439Z/
+!eval/results/20260518T194941Z/
 *.eval.json
 
 # Source PDFs (download list lives in papers/README.md)

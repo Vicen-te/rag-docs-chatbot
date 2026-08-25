@@ -116,7 +116,7 @@ rag-docs-chatbot/
 |       |-- tools/            # Tool registry exposed to the pipeline
 |       `-- management/       # Custom manage.py commands (ingest, eval, ragas)
 |-- frontend/                 # React + Vite SPA (login + streaming chat); nginx Dockerfile
-|-- eval/                     # dataset.jsonl + generated results/ (gitignored)
+|-- eval/                     # dataset.jsonl, A/B notes, and the three committed runs under results/
 `-- papers/                   # PDFs gitignored
 ```
 
@@ -352,6 +352,12 @@ python manage.py eval_run
 
 Each run writes `eval/results/<timestamp>/summary.md` (aggregate)
 and `per_question.jsonl` (full answers and per-question metrics).
+
+Runs are gitignored except the three the numbers below come from, which are
+committed so they can be inspected or re-scored without a GPU:
+`eval/results/20260518T193827Z/` (canonical hybrid, `top_k=12`, reranker off,
+with `ragas.jsonl`), `20260518T194439Z/` (semantic-only ablation) and
+`20260518T194941Z/` (no-retrieval ablation).
 
 ### Reproducing the full results
 
