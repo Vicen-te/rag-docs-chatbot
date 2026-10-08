@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.postgres",
     "rest_framework",
     "rag",
 ]
@@ -184,9 +185,14 @@ KB_CHUNK_OVERLAP = env.int("KB_CHUNK_OVERLAP", default=64)
 
 # Reciprocal Rank Fusion: k smooths the score at the head of the
 # ranking; weights pick how much to trust semantic vs lexical signal.
+# Equal weights are plain RRF. A 0.7/0.3 split caps a lexical-only
+# candidate at 0.3/(k+1), below the last dense candidate in the pool
+# (0.7/(k+2*top_k)), so the lexical channel could reorder dense hits
+# but never add a document; on the eval set that cost 2.3pp recall
+# at top_k=26 versus equal weights.
 KB_RRF_K = env.int("KB_RRF_K", default=60)
-KB_SEMANTIC_WEIGHT = env.float("KB_SEMANTIC_WEIGHT", default=0.7)
-KB_LEXICAL_WEIGHT = env.float("KB_LEXICAL_WEIGHT", default=0.3)
+KB_SEMANTIC_WEIGHT = env.float("KB_SEMANTIC_WEIGHT", default=0.5)
+KB_LEXICAL_WEIGHT = env.float("KB_LEXICAL_WEIGHT", default=0.5)
 
 # Cross-encoder used to rerank an initial candidate list.
 KB_RERANKER_MODEL = env(
@@ -218,10 +224,12 @@ OLLAMA_NUM_CTX = env.int("OLLAMA_NUM_CTX", default=4096)
 OLLAMA_NUM_PREDICT = env.int("OLLAMA_NUM_PREDICT", default=1024)
 
 # Number of KB chunks fed into the synthesis prompt. A retrieval-recall
-# sweep over the eval set put the knee at 12 (multi_hop recall 67->83%,
-# overall 88->94%) with no answer-quality regression; larger k only
-# adds prompt noise for marginal recall.
-AGENT_TOP_K = env.int("AGENT_TOP_K", default=12)
+# sweep over the eval set with both channels live puts hybrid recall at
+# 88% (8), 90% (12), 98% (26) and 96% (32): the papers dense retrieval
+# ranks deep (lora.pdf at 26, attention.pdf at 68 for their multi-hop
+# questions) only reach the fused list once the per-channel pool
+# (2 * top_k) is wide enough to hold the lexical rank that finds them.
+AGENT_TOP_K = env.int("AGENT_TOP_K", default=26)
 
 # Cross-encoder reranking. When enabled, hybrid_search returns
 # AGENT_TOP_K * AGENT_RERANK_CANDIDATES_MULTIPLIER candidates which

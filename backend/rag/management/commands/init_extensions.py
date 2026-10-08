@@ -2,11 +2,11 @@
 from django.core.management.base import BaseCommand
 from django.db import connection
 
-EXTENSIONS = ("vector", "pg_trgm")
+EXTENSIONS = ("vector",)
 
 
 class Command(BaseCommand):
-    help = "Install pgvector and pg_trgm extensions on the current database."
+    help = "Install the pgvector extension on the current database."
 
     def handle(self, *args, **options):
         with connection.cursor() as cursor:

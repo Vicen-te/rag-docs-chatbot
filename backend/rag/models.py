@@ -1,6 +1,8 @@
 import uuid
 
 from django.conf import settings
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
 from pgvector.django import VectorField
 
@@ -220,6 +222,16 @@ class KBChunk(models.Model):
     content = models.TextField()
     token_count = models.PositiveIntegerField(null=True, blank=True)
     embedding = VectorField(dimensions=settings.EMBEDDING_DIM, null=True, blank=True)
+    # Full-text index of `content` for the lexical retrieval channel
+    # (rag/kb/search.py). A stored generated column, so Postgres keeps
+    # it in sync on every insert and the migration backfills existing
+    # rows; ingestion never touches it. The english config stems and
+    # drops stop words, so the GIN index serves `@@` lookups directly.
+    search_vector = models.GeneratedField(
+        expression=SearchVector("content", config="english"),
+        output_field=SearchVectorField(),
+        db_persist=True,
+    )
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -228,6 +240,7 @@ class KBChunk(models.Model):
         indexes = [
             models.Index(fields=["document", "chunk_type"]),
             models.Index(fields=["parent_chunk"]),
+            GinIndex(fields=["search_vector"], name="rag_kbchunk_search_gin"),
         ]
 
     def __str__(self):

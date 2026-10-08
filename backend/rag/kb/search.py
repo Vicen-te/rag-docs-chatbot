@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -11,6 +12,8 @@ from django.db import connection, transaction
 from rag.memory.embeddings import embed_query
 
 Mode = Literal["semantic", "lexical", "hybrid"]
+
+_TERM_RE = re.compile(r"[a-z0-9][a-z0-9_.'-]*")
 
 
 @dataclass
@@ -73,28 +76,49 @@ def _semantic_search(query: str, top_k: int) -> list[SearchHit]:
     ]
 
 
+def lexical_query(question: str) -> str:
+    """Turn a question into the `websearch_to_tsquery` text for the
+    lexical channel: its distinct terms joined with `or`.
+
+    websearch's default joins terms with AND, and a 15-word question
+    against ~512-character child chunks then demands every stem in
+    one chunk -- the same "returns nothing" failure pg_trgm's
+    similarity threshold had. OR-ing the terms makes any overlap a
+    candidate and leaves the ordering to ts_rank_cd, which rewards
+    the number of matched terms and their proximity. Stop words
+    ("what", "the") are dropped by the english config on the Postgres
+    side, so they cost nothing here.
+    """
+    terms: list[str] = []
+    for tok in _TERM_RE.findall(question.lower()):
+        tok = tok.strip("_.'-")
+        if tok and tok not in terms:
+            terms.append(tok)
+    return " or ".join(terms)
+
+
 def _lexical_search(query: str, top_k: int) -> list[SearchHit]:
-    # pg_trgm `content % query` ranks by similarity(), which is
-    # symmetric and normalised over the union of both strings'
-    # trigrams: a short query against a ~512-token child chunk
-    # scores far below the default 0.3 threshold, so this lexical
-    # channel returns almost nothing and hybrid retrieval is
-    # dense-dominated on prose corpora.
+    # Full-text search over the stored `search_vector` column
+    # (to_tsvector('english', content), GIN-indexed, see KBChunk).
+    # `@@` keeps every child chunk sharing at least one stem with the
+    # question; ts_rank_cd orders them by how many query terms they
+    # cover and how close together.
     with transaction.atomic():
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT c.id::text, c.document_id::text,
                        d.source_path, d.title, c.content,
-                       similarity(c.content, %s) AS score,
+                       ts_rank_cd(c.search_vector, q.query) AS score,
                        c.parent_chunk_id::text, c.chunk_type
                 FROM rag_kbchunk c
-                JOIN rag_kbdocument d ON d.id = c.document_id
-                WHERE c.chunk_type = 'child' AND c.content %% %s
-                ORDER BY score DESC
+                JOIN rag_kbdocument d ON d.id = c.document_id,
+                     websearch_to_tsquery('english', %s) AS q(query)
+                WHERE c.chunk_type = 'child' AND c.search_vector @@ q.query
+                ORDER BY score DESC, c.id
                 LIMIT %s
                 """,
-                [query, query, top_k],
+                [lexical_query(query), top_k],
             )
             rows = cursor.fetchall()
     return [
