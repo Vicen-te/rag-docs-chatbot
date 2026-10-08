@@ -2,9 +2,9 @@
 
 A RAG chatbot with a grounding self-verification loop over a
 corpus of deep learning papers. Hybrid retrieval (pgvector +
-pg_trgm + RRF) feeds a LangGraph retrieve -> synthesise ->
-verify loop; a deterministic eval harness and Ragas back every
-number in this README.
+Postgres full-text search + RRF) feeds a LangGraph retrieve ->
+synthesise -> verify loop; a deterministic eval harness and Ragas
+back every number in this README.
 
 ## Table of contents
 
@@ -44,7 +44,7 @@ number in this README.
 | Web framework | Django 6.0 + DRF |
 | Auth | JWT (`djangorestframework-simplejwt`) |
 | Config | `django-environ` (12-factor `.env`) |
-| Database | PostgreSQL 18 + `pgvector` + `pg_trgm` |
+| Database | PostgreSQL 18 + `pgvector`; full-text search (`tsvector` + GIN) for the lexical channel |
 | Embeddings | `sentence-transformers` (`BAAI/bge-small-en-v1.5`, 384-dim) |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
 | LLM | Ollama native API or any OpenAI-compatible endpoint (`LLM_PROVIDER`) |
@@ -116,7 +116,7 @@ rag-docs-chatbot/
 |       |-- tools/            # Tool registry exposed to the pipeline
 |       `-- management/       # Custom manage.py commands (ingest, eval, ragas)
 |-- frontend/                 # React + Vite SPA (login + streaming chat); nginx Dockerfile
-|-- eval/                     # dataset.jsonl, A/B notes, and the three committed runs under results/
+|-- eval/                     # dataset.jsonl, A/B notes, and the committed runs under results/
 `-- papers/                   # PDFs gitignored
 ```
 
@@ -128,7 +128,7 @@ rag-docs-chatbot/
   + backend + frontend) -- one command, UI on port 80. See the
   *Docker stack* section below.
 - **Fully local (no Docker)** -- Python, PostgreSQL 18 (with
-  `pgvector` + `pg_trgm`) and Ollama all running natively; the dev
+  `pgvector`) and Ollama all running natively; the dev
   flow documented next. The React UI runs separately via Vite (see
   *Frontend*).
 
@@ -171,21 +171,22 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/rag
 The `.env` lives at the **repo root** (not inside `backend/`) and is
 gitignored.
 
-#### 3. Provision PostgreSQL 18 (pgvector + pg_trgm)
+#### 3. Provision PostgreSQL 18 (pgvector)
 
-Install PostgreSQL 18 natively. `pg_trgm` ships with the standard
-contrib package; `pgvector` is a separate extension -- install it
-into that Postgres by following the upstream guide for your platform:
-<https://github.com/pgvector/pgvector#installation>. Then create the
-database `DATABASE_URL` points at (use the `postgres` superuser
-password you set during install -- the `.env` example assumes
-`postgres`):
+Install PostgreSQL 18 natively. `pgvector` is a separate extension --
+install it into that Postgres by following the upstream guide for
+your platform: <https://github.com/pgvector/pgvector#installation>.
+The lexical channel uses the full-text search built into Postgres
+(`tsvector`, `websearch_to_tsquery`, GIN), so no further extension is
+needed. Then create the database `DATABASE_URL` points at (use the
+`postgres` superuser password you set during install -- the `.env`
+example assumes `postgres`):
 
 ```powershell
 psql -U postgres -c "CREATE DATABASE rag;"
 ```
 
-`init_extensions` (next step) runs `CREATE EXTENSION` for both, so the
+`init_extensions` (next step) runs `CREATE EXTENSION vector`, so the
 extension binaries must already be present on the server.
 
 #### 4. Install Postgres extensions and migrate
@@ -353,11 +354,13 @@ python manage.py eval_run
 Each run writes `eval/results/<timestamp>/summary.md` (aggregate)
 and `per_question.jsonl` (full answers and per-question metrics).
 
-Runs are gitignored except the three the numbers below come from, which are
-committed so they can be inspected or re-scored without a GPU:
-`eval/results/20260518T193827Z/` (canonical hybrid, `top_k=12`, reranker off,
-with `ragas.jsonl`), `20260518T194439Z/` (semantic-only ablation) and
-`20260518T194941Z/` (no-retrieval ablation).
+Runs are gitignored except the ones the numbers below come from, which
+are committed so they can be inspected or re-scored without a GPU; each
+table names its run directory under `eval/results/`, and `.gitignore`
+lists them grouped by purpose. The canonical chat run is
+`20261008T182441Z/` (hybrid, `top_k=26`, reranker off, with
+`ragas.jsonl`); `20260518T193827Z/` is the pre-fix baseline, kept so
+the before/after is reproducible.
 
 ### Reproducing the full results
 
@@ -366,14 +369,16 @@ From `backend/`, with the corpus ingested. `HF_HUB_OFFLINE`,
 `.env.example`); no shell exports needed.
 
 ```powershell
-# Retrieval + answer scoring, three modes. Local only -- free.
-# Each prints "results: <DIR>" at the end; note the three dirs.
+# Retrieval + answer scoring, four modes. Local only -- free.
+# Each prints "results: <DIR>" at the end; note the dirs.
 python manage.py eval_run --retrieval hybrid      # ~6-10 min (chat)
 python manage.py eval_run --retrieval semantic    # ~5-8 min
+python manage.py eval_run --retrieval lexical     # ~5-8 min
 python manage.py eval_run --retrieval none        # ~2-4 min (no retrieval)
 
 # A/B tables (instant, free). Drop straight into this README.
 python manage.py eval_compare <DIR_HYBRID> <DIR_SEMANTIC> --out ../eval/ab_hybrid_vs_semantic.md
+python manage.py eval_compare <DIR_HYBRID> <DIR_LEXICAL>  --out ../eval/ab_hybrid_vs_lexical.md
 python manage.py eval_compare <DIR_HYBRID> <DIR_NONE>     --out ../eval/ab_hybrid_vs_none.md
 
 # Ragas metrics on the hybrid run. Uses the judge in RAGAS_JUDGE_PROVIDER.
@@ -384,7 +389,10 @@ python manage.py ragas_run <DIR_HYBRID> --workers 3
 ```
 
 Retrieval-only sweeps are much faster -- add `--no-chat` to skip
-generation (scores `hit@k`/`recall` in seconds, no Ollama, no cost).
+generation (scores `hit@k`/`recall` in seconds, no Ollama, no cost)
+and `--top-k N` to sweep the candidate count; the reranker and query
+decomposition are read from `AGENT_USE_RERANKER` / `KB_RERANKER_MODEL`
+/ `AGENT_QUERY_DECOMPOSITION` and the summary header records them.
 `eval_run` never calls a paid API; only `ragas_run` with a cloud
 judge does.
 
@@ -403,75 +411,129 @@ judge does.
 Run: `qwen3.5:9b` generation, `bge-small-en-v1.5` embeddings,
 reranker off, 25 questions (22 non-negative + 3 negatives).
 Retrieval/answer metrics are deterministic; Ragas is judged by
-`claude-haiku-4-5`.
+`claude-haiku-4-5`. Every table names the run directory under
+`eval/results/` it is copied from.
 
-**Retrieval mode ablation** (canonical `top_k=12`, thinking
-disabled; full A/B in `eval/ab_hybrid_vs_*.md`):
+**Before: the lexical channel was inert.** The pre-fix baseline
+(`20260518T193827Z`, `top_k=12`) measured hybrid and semantic-only
+as byte-identical (every A/B delta exactly +0.0pp). The lexical
+channel filtered with pg_trgm `content % query` and ranked by
+`similarity()`, which is symmetric and normalised over the union of
+both strings' trigrams: a 10-20 word question against a ~512-token
+child chunk sits structurally below the 0.3 threshold on every
+question, so `_lexical_search` returned ~0 rows and RRF fused dense
+hits with nothing. "Hybrid" was dense retrieval at 100% hit@12 /
+93.94% recall.
 
-| metric | hybrid (RRF) | semantic only | no retrieval |
-|---|---|---|---|
-| retrieval hit@12 | 100% | 100% | -- |
-| retrieval recall | 93.94% | 93.94% | -- |
-| answer keyword hit | 95.45% | 95.45% | 36.36% |
-| answer cites a doc | 100% | 100% | 18.18% |
+**After: Postgres full-text search as the lexical channel.** Each
+child chunk carries a stored generated `tsvector` column
+(`to_tsvector('english', content)`, GIN-indexed); the question's
+terms are OR-ed into `websearch_to_tsquery` and candidates are ranked
+by `ts_rank_cd`, then fused with the dense ranking by RRF at equal
+weights. OR rather than websearch's default AND, because demanding
+every stem of a 15-word question inside one chunk re-creates the
+"returns nothing" failure. The channel now returns a full candidate
+list on every question and the fused top-k differs from the dense
+top-k on 22 of 25 questions.
 
-`hybrid` vs `semantic only`: byte-identical -- every A/B delta is
-exactly +0.0pp, and that exactness is the tell. The lexical channel
-filters with pg_trgm `content % query` and ranks by `similarity()`
-(trigrams shared over the trigrams of the union, default 0.3
-threshold). With ~512-token child chunks and a short query, that
-similarity sits structurally far below 0.3 for any query --
-sentence or single keyword -- so `_lexical_search` returns ~0 rows,
-RRF fuses ~12 dense hits with ~0 lexical, and hybrid degenerates to
-pure dense on every query. So on this setup hybrid retrieval *is*
-dense retrieval, by mechanism: `%`/`similarity` is the wrong tool
-for short-query-vs-long-document, so the pg_trgm channel as wired
-is effectively inert. The numbers are unaffected -- dense alone
-hits 100% / 93.94% recall and the no-retrieval ablation below shows
-retrieval is still load-bearing -- but the honest reading is that
-the lexical half of "hybrid" is not contributing here; making it
-real (pg_trgm `word_similarity` / `<%`, or a `tsvector` full-text
-channel) would change retrieval and require re-measuring.
+**Retrieval mode ablation** (default `top_k=26`, thinking disabled;
+full A/B in `eval/ab_hybrid_vs_*.md`; runs `20261008T182441Z`,
+`20261008T183008Z`, `20261008T183555Z`, `20261008T184146Z`):
+
+| metric | hybrid (RRF) | semantic only | lexical only | no retrieval |
+|---|---|---|---|---|
+| retrieval hit@26 | 100% | 100% | 100% | -- |
+| retrieval recall | 98.48% | 96.21% | 95.45% | -- |
+| multi_hop recall | 100% | 92% | 92% | -- |
+| answer keyword hit | 90.91% | 95.45% | 90.91% | 36.36% |
+| answer cites a doc | 100% | 100% | 100% | 54.55% |
+| negatives abstained | 2/3 | 2/3 | 2/3 | 3/3 |
+
+`hybrid` vs either channel alone: the two channels miss different
+papers. Dense retrieval ranks `attention.pdf` 68th for mh-06 (and
+`lora.pdf` 26th for mh-02, the last slot); full-text search puts
+them 5th and 8th. Full-text search in turn misses `lora.pdf` for
+syn-01 and `sbert.pdf` for mh-05, which dense ranks at the top. Fused, only
+syn-02 (`self-rag.pdf`, ranks 27 dense / 16 lexical) stays out, so
+hybrid recall is 98.48% against 96.21% / 95.45% for the channels
+alone and `multi_hop` recall reaches 100%. Answer keyword hit is an
+LLM-side metric and moves by one or two questions between runs of
+the same configuration (see the `top_k` comparison below); the
+hybrid run's two misses are `sh-06`, whose answer says "reasoning
+and action" where the token is `acting`, and `mh-02`, which now
+retrieves `lora.pdf` but phrases the answer without the word
+`adapter`.
 
 `hybrid` vs `no retrieval` is the load-bearing comparison: stripping
-the context drops answer keyword hit from 95.45% to 36.36%
-(-59.1pp) and citations from 100% to 18%. The 9B model knows these
-famous papers, yet retrieval still contributes ~59pp of answer
+the context drops answer keyword hit from 90.91% to 36.36%
+(-54.5pp) and citations from 100% to 54.55%. The 9B model knows
+these famous papers, yet retrieval still contributes ~55pp of answer
 accuracy -- evidence the pipeline works, not that the model
 memorised the corpus.
 
+**Fusion weights.** The old 0.7/0.3 semantic/lexical split was tuned
+while the lexical channel was empty. With weighted RRF a lexical-only
+candidate scores at most `0.3 / (k + 1)`, below the last dense
+candidate of the `2 * top_k` pool (`0.7 / (k + 2 * top_k)`), so the
+lexical channel could reorder dense hits but never add a document.
+Measured at `top_k=26`: 96.21% recall at 0.7/0.3
+(`20261008T181755Z`) vs 98.48% at 0.5/0.5 (`20261008T182147Z`), so
+the default is plain, equal-weight RRF.
+
 **Tuning `top_k`.** Sweeping the candidate count against retrieval
-recall:
+recall, hybrid, reranker off (`--no-chat`; runs `20261008T182129Z`,
+`20261008T182138Z`, `20261008T182147Z`, `20261008T182156Z`):
 
-| top_k | single_hop | multi_hop | synthesis | overall |
-|---|---|---|---|---|
-| 8 | 100% | 67% | 78% | 88% |
-| 12 | 100% | 83% | 89% | 94% |
-| 26 | 100% | 92% | 89% | 96% |
-| 32 | 100% | 92% | 100% | 98% |
+| top_k | single_hop | multi_hop | detail_tech | synthesis | overall |
+|---|---|---|---|---|---|
+| 8 | 100% | 67% | 100% | 78% | 87.88% |
+| 12 | 100% | 75% | 100% | 78% | 90.15% |
+| 26 | 100% | 100% | 100% | 89% | 98.48% |
+| 32 | 100% | 92% | 100% | 89% | 96.21% |
 
-The knee is at 12 (`multi_hop` +16.7pp, overall +6pp); past it,
-recall grows slowly while prompt noise and latency grow fast, so
-`AGENT_TOP_K` defaults to 12. Canonical chat eval at the default
-`top_k=12` (hybrid), run `20260518T193827Z`:
+12 was the knee when hybrid reduced to dense (93.94% at 12, 96.21%
+at 26 -- `20260518T193827Z`, `20261008T182205Z`). With both channels
+live it is not: at `top_k=12` each channel contributes a pool of 24,
+too shallow for the fused list to keep the papers one channel ranks
+deep, and hybrid (90.15%) trails dense alone. By 26 the pool is 52
+per channel and every multi-hop paper is in. 32 is slightly worse
+than 26: a 64-wide pool admits more chunks present in both channels,
+and under RRF those outscore a single-channel hit such as mh-06's
+`attention.pdf` (lexical rank 5, absent from the dense pool). So
+`AGENT_TOP_K` defaults to 26. The cost is the prompt: chat at
+`top_k=26` vs `top_k=12` (hybrid, same model; `20261008T182441Z` vs
+`20261008T184313Z`):
+
+| | `top_k=26` | `top_k=12` |
+|---|---|---|
+| retrieval recall (non-negative) | 98.48% | 90.15% |
+| answer keyword hit | 90.91% (20/22) | 100% (22/22) |
+| answer cites a doc | 100% | 100% |
+| negatives abstained correctly | 2/3 | 3/3 |
+| chat p50 / p95 (ms) | 14592 / 22943 | 10343 / 22901 |
+
+Retrieval recall is deterministic and the gap is 8.3pp; the
+keyword-hit and abstention columns are single LLM runs at
+temperature 0.2 -- the two tracked `top_k=12` hybrid runs scored
+95.45% (`20260518T193827Z`) and 100% (`20261008T184313Z`), and the
+`top_k=26` runs 90.91-95.45% depending on the channel -- so they do
+not separate the two settings, while the extra 14 chunks cost ~4 s
+of median latency. Canonical chat eval at the default `top_k=26`
+(hybrid), run `20261008T182441Z`:
 
 | metric | value |
 |---|---|
-| retrieval hit@12 (non-negative) | 100% |
-| retrieval recall (non-negative) | 93.94% |
-| answer keyword hit | 95.45% (21/22) |
+| retrieval hit@26 (non-negative) | 100% |
+| retrieval recall (non-negative) | 98.48% |
+| answer keyword hit | 90.91% (20/22) |
 | answer cites a doc | 100% |
 | negatives abstained correctly | 2/3 |
+| retrieval p50 / p95 (ms) | 82 / 110 |
+| chat p50 / p95 (ms) | 14592 / 22943 |
 
-`keyword_hit` was a brittle substring check. Two early misses were
-metric artifacts, not wrong answers: `sh-07` answered "reward score"
-vs the token `feedback`; `mh-02` wrote "quantization" vs the British
-stem `quantis`. Tokens now accept `a|b` alternatives. The one
-remaining miss (95.45%, 21/22) is `mh-02`, which has a real
-retrieval gap -- recall 0.50, `lora.pdf` ranked past `top_k=12` so
-only `qlora.pdf` is retrieved. Whether the answer still surfaces the
-LoRA/`adapter` token varies run to run on that thin context; it is
-recorded honestly as the `multi_hop` recall miss, not masked.
+`keyword_hit` is a substring check; tokens accept `a|b` alternatives
+for accepted synonyms (`quantis|quantiz`, `feedback|reward|score`),
+and the two misses above are described with the ablation table.
 
 Generation runs with the model's chain-of-thought disabled
 (`think:false`): this client consumes `message.content`, and a
@@ -482,91 +544,89 @@ nothing is lost; chat latency drops ~5x (p50 ~15s) and every number
 here is measured in this configuration. Citations are the readable
 source filename, e.g. `[doc:attention.pdf]`.
 
-Ragas (22 non-negative questions, canonical `top_k=12` run;
-negatives are abstention tests, not answers, scored by abstention).
-`ragas_run` computes only the three reference-free metrics -- the
-dataset has no gold answers, so the reference-based
-`context_precision`/`context_recall` would mis-attribute and are
-not computed:
+Ragas (22 non-negative questions, canonical `top_k=26` run
+`20261008T182441Z`; negatives are abstention tests, not answers,
+scored by abstention). `ragas_run` computes only the three
+reference-free metrics -- the dataset has no gold answers, so the
+reference-based `context_precision`/`context_recall` would
+mis-attribute and are not computed:
 
-| metric | mean | reference-free? |
+| metric | mean | pre-fix baseline (`top_k=12`, `20260518T193827Z`) |
 |---|---|---|
-| faithfulness | 0.907 | yes |
-| answer relevancy | 0.930 | yes |
-| llm_context_precision_without_reference | 0.385 | yes |
+| faithfulness | 0.900 | 0.907 |
+| answer relevancy | 0.927 | 0.930 |
+| llm_context_precision_without_reference | 0.330 | 0.385 |
 
 `faithfulness` and `answer_relevancy` need no reference: generation
-is well grounded in the retrieved context (0.907) and on-topic
-(0.930).
+is well grounded in the retrieved context (0.900) and on-topic
+(0.927), and neither moved when the context doubled from 12 to 26
+chunks.
 
-`llm_context_precision_without_reference` is 0.385, and that low
-number is the correct number for this operating point, for two
-compounding reasons -- neither a retrieval defect, both measured:
+`llm_context_precision_without_reference` is 0.330, down from 0.385
+at `top_k=12`, and that low number is the correct number for this
+operating point, for two compounding reasons -- neither a retrieval
+defect, both measured:
 
-1. It is mechanically modest at the recall-tuned `top_k=12`. The
-   metric is Average-Precision over the 12 retrieved chunks. `top_k`
-   sits at the recall knee (see the sweep above): with only ~1-3
-   truly-supporting chunks among 12 and a retriever tuned to put the
-   right chunk somewhere in the top-12 rather than at rank 1, AP@12
-   is bounded low by construction. Raising it means forcing the best
-   chunk to rank 1 -- exactly a cross-encoder reranker's job -- and
-   the reranker table below shows two models measured net-negative
-   here. `faithfulness` 0.907 confirms the model uses the supporting
-   chunks and ignores the rest.
-2. Per-chunk precision penalises abstractive answers. Three
-   questions score exactly 0.0 -- `mh-04`, `syn-02`, `syn-03` --
-   all multi-hop/synthesis answers that abstract across several
-   papers, so the per-chunk judge cannot map a synthesised narrative
-   back to any single raw chunk and returns all-zero, even though
-   their deterministic recall and keyword hit are fine. Excluding
-   the three, the precision mean rises from 0.385 to 0.446.
+1. It is mechanically modest at a recall-tuned `top_k`. The metric
+   is Average-Precision over the retrieved chunks: with only ~1-3
+   truly-supporting chunks among 26 and a retriever tuned to put
+   every needed paper somewhere in the list rather than at rank 1,
+   AP@26 is bounded low by construction, and going from 12 to 26
+   chunks lowers it further while recall rises 90% -> 98%. Raising
+   it means forcing the best chunk to rank 1 -- exactly a
+   cross-encoder reranker's job -- and the reranker table below
+   shows two models measured net-negative here. `faithfulness`
+   0.900 confirms the model uses the supporting chunks and ignores
+   the rest.
+2. Per-chunk precision penalises abstractive answers. Four questions
+   score exactly 0.0 -- `mh-04`, `mh-05`, `syn-02`, `syn-03` -- all
+   multi-hop/synthesis answers that abstract across several papers,
+   so the per-chunk judge cannot map a synthesised narrative back to
+   any single raw chunk and returns all-zero, even though their
+   deterministic recall and keyword hit are fine. Excluding the
+   four, the precision mean rises from 0.330 to 0.403.
 
 The trustworthy retrieval evidence is the deterministic `hit@k` /
 `recall` figures plus the no-retrieval ablation, not this per-chunk
 precision number.
 
-The remaining weak spot is `multi_hop` retrieval recall: 83% at the
-default `top_k=12` (up from 67% at 8). A cross-encoder reranker makes
-it **worse**, and this was checked with two models, not assumed:
+**Reranking** still makes `multi_hop` recall worse, checked with two
+cross-encoders over the `3 * top_k = 78` candidate pool at
+`top_k=26` (`--no-chat`; runs `20261008T182220Z`,
+`20261008T182242Z`):
 
-| multi_hop recall (top_k=12) | overall |
+| multi_hop recall (top_k=26) | overall |
 |---|---|
-| hybrid only: **83%** | **94%** |
-| + `ms-marco-MiniLM-L-6-v2`: 67% | 89% |
-| + `bge-reranker-base`: 75% | 92% |
+| hybrid only: **100%** | **98.48%** |
+| + `ms-marco-MiniLM-L-6-v2`: 67% | 89.39% |
+| + `bge-reranker-base`: 83% | 93.94% |
 
-Rescoring the 36-candidate pool, both rerankers demote `react.pdf`
-(rank 9) -- already inside plain hybrid's top-12 -- out of the final
-12, and neither rescues `lora.pdf` (rank 26, in the pool) for mh-02.
-The stronger `bge` reranker beats the tiny MiniLM but still loses to
-no reranker: the dense `top_k=12` ranking is already strong for
-this domain, so any re-sort of a candidate pool mostly risks
-dropping documents it had right. The reranker stays off by default.
+Both rerankers demote `react.pdf` (mh-03) and `attention.pdf`
+(mh-06) -- inside plain hybrid's top-26 -- out of the final 26;
+MiniLM also drops `lora.pdf` (mh-02) and `hyde.pdf` (mh-04). The
+stronger `bge` reranker beats the tiny MiniLM but still loses to no
+reranker: the fused ranking is already strong for this domain, so a
+re-sort of the pool mostly risks dropping documents it had right.
+The reranker stays off by default.
 
-Query decomposition (split a multi-hop question into sub-queries,
+**Query decomposition** (split a multi-hop question into sub-queries,
 retrieve each, merge round-robin into the same `top_k` budget) was
-implemented and measured too: also net-negative -- multi_hop recall
-83 -> 75%. It does fix the case it targets (`mh-02`: a "what is
-LoRA?" sub-query lifts `lora.pdf` from rank 26, recall 0.50 -> 1.00)
-but breaks two questions the single query already answered (`mh-01`,
-`mh-05`: 1.00 -> 0.50) -- splitting a fixed 12-chunk budget across
-sub-queries halves per-topic depth, dropping chunks hybrid had
-captured. Kept opt-in (`AGENT_QUERY_DECOMPOSITION`).
+measured at both budgets (`--no-chat`; runs `20261008T182414Z`,
+`20261008T184809Z`). At `top_k=26` it is neutral: 98.48% recall,
+the same single miss (syn-02), for an extra LLM call that adds
+0.2-1.3 s of retrieval latency per question. At `top_k=12` it helps
+(90.15% -> 93.94%, `react.pdf` back for mh-03) because splitting
+the query is another way of widening a pool that is too narrow --
+which the default `top_k` already does without the LLM call. Kept
+opt-in (`AGENT_QUERY_DECOMPOSITION`).
 
 So every standard "advanced RAG" lever -- reranking (two models),
 query decomposition, and the per-chunk precision metric itself --
-was measured, not assumed, and none changes the verdict: well-tuned
-dense retrieval at `top_k=12` -- what hybrid reduces to here, the
-lexical channel being inert (above) -- is the measured optimum on
-this corpus.
-The low per-chunk precision reflects that deliberate recall-tuned
-`k=12` operating point and a known weakness of per-chunk precision
-on abstractive answers, not a retrieval defect. The residual
-`multi_hop` gap is a known limitation (e.g. `mh-06`'s
-`attention.pdf` at rank 68 is past any sane candidate pool).
-Negatives are scored by abstention, not Ragas: 2/3 here -- one
-off-corpus question ("SAM 3") was answered instead of refused, a
-known limitation.
+was measured, not assumed, and none beats plain hybrid retrieval at
+`top_k=26` on this corpus. The residual gap is syn-02's third paper
+(`self-rag.pdf` at rank 27 dense / 16 lexical). Negatives are scored
+by abstention, not Ragas: 2/3 here -- one off-corpus question
+("SAM 3") was answered instead of refused, a known limitation.
 
 ### Healthy ranges
 
@@ -632,9 +692,11 @@ sample.
 
 Change one knob at a time, re-run the eval, diff the summaries:
 
-- weak `multi_hop` -> raise `AGENT_TOP_K`. The reranker and query
-  decomposition were both measured net-negative here (see Results);
-  the residual gap is a known limitation.
+- weak `multi_hop` -> raise `AGENT_TOP_K` (the per-channel pool is
+  `2 * top_k`, and a paper one channel ranks deep needs room in it).
+  The reranker was measured net-negative and query decomposition
+  neutral at the default (see Results); the residual gap is a known
+  limitation.
 - weak `detail_tech` -> raise `OLLAMA_NUM_CTX`, or lower
   `KB_CHILD_CHUNK_SIZE` (requires re-ingest).
 - weak `synthesis` -> tune prompts in
@@ -657,18 +719,19 @@ defaults. The most impactful ones:
 - `OLLAMA_NUM_CTX` -- context window forwarded to Ollama; raise it
   when retrieved chunks risk truncation.
 - `AGENT_TOP_K` -- how many KB chunks feed the synthesis prompt
-  (defaults to 12, chosen from a recall sweep -- see Results).
+  (defaults to 26, chosen from a recall sweep -- see Results).
 - `AGENT_USE_RERANKER` -- enable the cross-encoder reranking pass.
   Off by default: measured to *reduce* multi_hop recall on this
   corpus (the MS-MARCO reranker mis-ranks academic prose -- see
   Results), kept for corpora where ranking order matters.
 - `AGENT_QUERY_DECOMPOSITION` -- split multi-hop questions into
-  sub-queries. Off by default: also measured net-negative here
-  (see Results), kept opt-in.
+  sub-queries. Off by default: measured neutral at the default
+  `top_k` for an extra LLM call per question (see Results), kept
+  opt-in.
 - `KB_SEMANTIC_WEIGHT` / `KB_LEXICAL_WEIGHT` -- bias of the hybrid
-  fusion (must sum to roughly 1.0). Note: on prose corpora the
-  pg_trgm lexical channel returns ~0 (see Results), so this split
-  has no measurable effect until that channel is reworked.
+  fusion (must sum to roughly 1.0). Equal weights are plain RRF and
+  the measured default; a 0.7/0.3 split keeps the lexical channel
+  from ever adding a document the dense pool missed (see Results).
 - `AGENT_MAX_VERIFY_RETRIES` -- set to `0` to skip the verifier loop.
 - `RAGAS_JUDGE_PROVIDER` -- judge LLM for `ragas_run` (`ollama` or
   `openai`).

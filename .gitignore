@@ -29,13 +29,36 @@ Thumbs.db
 files/
 data/
 
-# Eval outputs (generated). The three runs the README quotes are committed on purpose:
-# canonical hybrid top_k=12 run (+ Ragas) and the two ablations it is compared against.
+# Eval outputs (generated). The runs the README quotes are committed on purpose
+# so every number can be inspected or re-scored; every other run stays out.
 eval_results/
 eval/results/*
+# pre-fix baseline (pg_trgm lexical channel inert, hybrid == dense): canonical
+# top_k=12 chat run (+ Ragas) and its semantic-only / no-retrieval ablations
 !eval/results/20260518T193827Z/
 !eval/results/20260518T194439Z/
 !eval/results/20260518T194941Z/
+# full-text lexical channel, equal RRF weights: top_k sweep 8 / 12 / 26 / 32
+!eval/results/20261008T182129Z/
+!eval/results/20261008T182138Z/
+!eval/results/20261008T182147Z/
+!eval/results/20261008T182156Z/
+# channel ablation at top_k=26 (semantic only, lexical only) and 0.7/0.3 weights
+!eval/results/20261008T182205Z/
+!eval/results/20261008T182213Z/
+!eval/results/20261008T181755Z/
+# rerankers (MiniLM, bge-reranker-base) and query decomposition (top_k 26, 12)
+!eval/results/20261008T182220Z/
+!eval/results/20261008T182242Z/
+!eval/results/20261008T182414Z/
+!eval/results/20261008T184809Z/
+# chat evals at top_k=26: canonical hybrid (+ Ragas), semantic, lexical, none;
+# and hybrid at top_k=12 for the answer-quality comparison
+!eval/results/20261008T182441Z/
+!eval/results/20261008T183008Z/
+!eval/results/20261008T183555Z/
+!eval/results/20261008T184146Z/
+!eval/results/20261008T184313Z/
 *.eval.json
 
 # Source PDFs (download list lives in papers/README.md)
