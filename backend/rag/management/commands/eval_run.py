@@ -1,9 +1,10 @@
 """Run the eval dataset against retrieval and the full RAG pipeline.
 
-Reads `eval/dataset.jsonl`, runs each question through `hybrid_search`
-and `run_pipeline`, scores per-question metrics, and writes a markdown
-summary plus a JSONL of raw per-question records under
-`eval/results/<timestamp>/`.
+Reads `eval/dataset.jsonl`, runs each question through the pipeline's
+`retrieve_context` (so hit@k / recall see the reranker and query
+decomposition when they are on) and `run_pipeline`, scores
+per-question metrics, and writes a markdown summary plus a JSONL of
+raw per-question records under `eval/results/<timestamp>/`.
 
 The harness exercises the same code paths the API uses; it does not
 make HTTP calls. This keeps the loop fast and skips JWT plumbing.
@@ -23,9 +24,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from rag.kb.search import hybrid_search
 from rag.models import KBDocument
-from rag.orchestrator.graph import run_pipeline
+from rag.orchestrator.graph import retrieve_context, run_pipeline
 
 ABSTAIN_PATTERNS = [
     r"\bi (?:do not|don't|cannot|can't) (?:know|find|answer)\b",
@@ -114,7 +114,8 @@ class Command(BaseCommand):
         parser.add_argument("--output-dir", type=str, default=str(default_out))
         parser.add_argument(
             "--top-k", type=int, default=settings.AGENT_TOP_K,
-            help="top_k passed to hybrid_search for retrieval scoring.",
+            help="top_k used for retrieval scoring (the chat pipeline "
+                 "keeps AGENT_TOP_K).",
         )
         parser.add_argument(
             "--no-chat", action="store_true",
@@ -131,13 +132,14 @@ class Command(BaseCommand):
         parser.add_argument(
             "--retrieval",
             type=str,
-            choices=["hybrid", "semantic", "none"],
+            choices=["hybrid", "semantic", "lexical", "none"],
             default="hybrid",
             help=(
                 "Retrieval mode for both the metrics call and the pipeline: "
-                "'hybrid' (pgvector + pg_trgm via RRF), 'semantic' "
-                "(embeddings only), 'none' (no retrieval -- the LLM "
-                "answers from its own knowledge as a control)."
+                "'hybrid' (pgvector + full-text search via RRF), 'semantic' "
+                "(embeddings only), 'lexical' (full-text search only), "
+                "'none' (no retrieval -- the LLM answers from its own "
+                "knowledge as a control)."
             ),
         )
 
@@ -224,7 +226,7 @@ class Command(BaseCommand):
         if retrieval_mode == "none":
             hits = []
         else:
-            hits = hybrid_search(question, mode=retrieval_mode, top_k=top_k)
+            hits = retrieve_context(question, retrieval_mode, top_k)
         retrieve_ms = (time.perf_counter() - t0) * 1000.0
 
         retrieved_sources = []
@@ -314,7 +316,18 @@ class Command(BaseCommand):
         lines.append(f"- chat: {'on' if run_chat else 'off'}")
         lines.append(f"- retrieval: {retrieval_mode}")
         lines.append(f"- model: {settings.OLLAMA_MODEL}")
-        lines.append(f"- reranker: {'on' if settings.AGENT_USE_RERANKER else 'off'}")
+        if settings.AGENT_USE_RERANKER:
+            lines.append(f"- reranker: on ({settings.KB_RERANKER_MODEL})")
+        else:
+            lines.append("- reranker: off")
+        lines.append(
+            "- query decomposition: "
+            f"{'on' if settings.AGENT_QUERY_DECOMPOSITION else 'off'}"
+        )
+        lines.append(
+            f"- fusion weights: semantic {settings.KB_SEMANTIC_WEIGHT} / "
+            f"lexical {settings.KB_LEXICAL_WEIGHT}"
+        )
         lines.append("")
 
         non_neg = [r for r in records if r["category"] != "negative"]

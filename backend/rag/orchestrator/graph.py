@@ -94,24 +94,29 @@ def _merge_searches(subqueries: list[str], mode: str, per_k: int):
     return merged
 
 
+def retrieve_context(query: str, mode: str, top_k: int):
+    """The retrieval the knowledge branch feeds to synthesis: optional
+    query decomposition, the search in `mode`, and the optional
+    cross-encoder rerank of a wider candidate pool. Shared with the
+    eval harness so hit@k / recall score exactly these hits."""
+    if settings.AGENT_QUERY_DECOMPOSITION:
+        subqueries = decompose_query(query)
+    else:
+        subqueries = [query]
+    if settings.AGENT_USE_RERANKER:
+        per_k = top_k * settings.AGENT_RERANK_CANDIDATES_MULTIPLIER
+        candidates = _merge_searches(subqueries, mode, per_k)
+        return rerank(query, candidates, top_k=top_k)
+    return _merge_searches(subqueries, mode, top_k)[:top_k]
+
+
 @traceable(run_type="retriever", name="retrieve")
 def _retrieve(state: AgentState, config) -> AgentState:
     mode = state.get("retrieval_mode", "hybrid")
     if mode == "none":
         state["context"] = []
         return state
-    query = state["user_message"]
-    if settings.AGENT_QUERY_DECOMPOSITION:
-        subqueries = decompose_query(query)
-    else:
-        subqueries = [query]
-    top_k = settings.AGENT_TOP_K
-    if settings.AGENT_USE_RERANKER:
-        per_k = top_k * settings.AGENT_RERANK_CANDIDATES_MULTIPLIER
-        candidates = _merge_searches(subqueries, mode, per_k)
-        hits = rerank(query, candidates, top_k=top_k)
-    else:
-        hits = _merge_searches(subqueries, mode, top_k)[:top_k]
+    hits = retrieve_context(state["user_message"], mode, settings.AGENT_TOP_K)
     state["context"] = [
         {
             "document_id": h.document_id,
