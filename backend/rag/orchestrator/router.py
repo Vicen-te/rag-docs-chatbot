@@ -1,9 +1,17 @@
 """Pre-graph classification and fast routing."""
 from __future__ import annotations
 
+import re
+
 CONVERSATIONAL_KEYWORDS = (
     "hi", "hello", "hey", "thanks", "thank you", "bye", "goodbye",
     "who are you", "what can you do",
+)
+
+# Whole-word / whole-phrase match, so "hi" does not fire inside "this" or
+# "architecture".
+_CONVERSATIONAL_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(k) for k in CONVERSATIONAL_KEYWORDS) + r")\b"
 )
 
 GREETING_FAST_REPLIES = {
@@ -18,7 +26,7 @@ GREETING_FAST_REPLIES = {
 def classify_task_type(message: str) -> str:
     """Cheap heuristic classifier. Returns 'conversational' or 'rag'."""
     low = message.lower().strip()
-    if any(k in low for k in CONVERSATIONAL_KEYWORDS) and len(low.split()) < 8:
+    if _CONVERSATIONAL_RE.search(low) and len(low.split()) < 8:
         return "conversational"
     return "rag"
 
